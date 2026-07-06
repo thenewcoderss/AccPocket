@@ -1,18 +1,22 @@
 import { Router } from "express";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
+import { DateTime } from "luxon";
 import { prisma } from "../../config/prisma.js";
 import { authenticate, requireUnlock } from "../../middleware/security.js";
 import { asyncRoute } from "../../utils/errors.js";
 import { reportData } from "../reports/service.js";
+import { budgetMonthDate } from "../budgets/validation.js";
 
 export const dashboardRouter = Router();
 dashboardRouter.use(authenticate, requireUnlock);
 dashboardRouter.get("/", asyncRoute(async (req, res) => {
   const period = z.enum(["day", "week", "month"]).default("month").parse(req.query.period);
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: req.userId! }, select: { timezone: true } });
+  const currentBudgetMonth = budgetMonthDate(DateTime.now().setZone(user.timezone).toFormat("yyyy-MM"));
   const [report, accounts, budgets, goals, recent] = await Promise.all([
     reportData(req.userId!, period), prisma.account.findMany({ where: { userId: req.userId!, archived: false }, orderBy: { createdAt: "asc" } }),
-    prisma.budget.findMany({ where: { userId: req.userId! }, include: { category: true }, take: 8, orderBy: { month: "desc" } }),
+    prisma.budget.findMany({ where: { userId: req.userId!, month: currentBudgetMonth }, include: { category: true }, take: 8, orderBy: { category: { name: "asc" } } }),
     prisma.goal.findMany({ where: { userId: req.userId!, status: "ACTIVE" }, include: { contributions: { where: { transaction: { deletedAt: null } } } } }),
     prisma.transaction.findMany({ where: { userId: req.userId!, deletedAt: null }, include: { category: true, entries: { include: { account: true } } }, orderBy: [{ date: "desc" }, { createdAt: "desc" }], take: 6 })
   ]);

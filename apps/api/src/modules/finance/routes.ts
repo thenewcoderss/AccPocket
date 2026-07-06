@@ -8,6 +8,7 @@ import { AppError, asyncRoute } from "../../utils/errors.js";
 import { accountInput } from "../accounts/validation.js";
 import { fitsMoneyColumn, signedTransactionAmount, transactionInput } from "../transactions/validation.js";
 import { transferInput } from "../transfers/validation.js";
+import { budgetInput, budgetMonth, budgetMonthDate, budgetProgress } from "../budgets/validation.js";
 
 export const financeRouter = Router();
 financeRouter.use(authenticate, requireUnlock);
@@ -143,25 +144,28 @@ async function createTransfer(userId: string, input: z.infer<typeof transferSche
 financeRouter.post("/transfers", asyncRoute(async (req, res) => res.status(201).json({ success: true, data: await createTransfer(req.userId!, transferSchema.omit({ goalId: true }).parse(req.body)) })));
 
 financeRouter.get("/budgets", asyncRoute(async (req, res) => {
-  const monthText = z.string().regex(/^\d{4}-\d{2}$/).default(DateTime.now().toFormat("yyyy-MM")).parse(req.query.month);
-  const start = DateTime.fromFormat(monthText, "yyyy-MM", { zone: "utc" }).startOf("month");
-  const rows = await prisma.budget.findMany({ where: { userId: req.userId!, month: start.toJSDate() }, include: { category: true } });
+  const monthText = budgetMonth.default(DateTime.now().toFormat("yyyy-MM")).parse(req.query.month);
+  const start = DateTime.fromJSDate(budgetMonthDate(monthText), { zone: "utc" });
+  const rows = await prisma.budget.findMany({ where: { userId: req.userId!, month: start.toJSDate() }, include: { category: true }, orderBy: { category: { name: "asc" } } });
   const spent = await prisma.ledgerEntry.groupBy({ by: ["transactionId"], where: { transaction: { userId: req.userId!, type: "EXPENSE", deletedAt: null, date: { gte: start.toJSDate(), lt: start.plus({ months: 1 }).toJSDate() } } }, _sum: { amount: true } });
   const txs = await prisma.transaction.findMany({ where: { id: { in: spent.map(s => s.transactionId) } }, select: { id: true, categoryId: true } });
   const sums = new Map<string, Prisma.Decimal>();
   for (const item of spent) { const category = txs.find(t => t.id === item.transactionId)?.categoryId; if (category) sums.set(category, (sums.get(category) ?? new Prisma.Decimal(0)).add(item._sum.amount?.abs() ?? 0)); }
-  res.json({ success: true, data: rows.map(b => ({ id: b.id, categoryId: b.categoryId, name: b.category.name, color: b.category.color, month: monthText, limit: b.limitAmount.toString(), spent: (sums.get(b.categoryId) ?? new Prisma.Decimal(0)).toString() })) });
+  res.json({ success: true, data: rows.map(b => { const amount = sums.get(b.categoryId) ?? new Prisma.Decimal(0); return { id: b.id, categoryId: b.categoryId, name: b.category.name, color: b.category.color, month: monthText, limit: b.limitAmount.toString(), spent: amount.toString(), ...budgetProgress(b.limitAmount, amount) }; }) });
 }));
 financeRouter.post("/budgets", asyncRoute(async (req, res) => {
-  const input = z.object({ categoryId: id, month: z.string().regex(/^\d{4}-\d{2}$/), limitAmount: money }).parse(req.body);
+  const input = budgetInput.parse(req.body);
   await assertCategory(req.userId!, input.categoryId, "EXPENSE");
-  const row = await prisma.budget.create({ data: { userId: req.userId!, categoryId: input.categoryId, month: DateTime.fromFormat(input.month, "yyyy-MM", { zone: "utc" }).startOf("month").toJSDate(), limitAmount: input.limitAmount } });
+  const month = budgetMonthDate(input.month);
+  const existing = await prisma.budget.findUnique({ where: { userId_categoryId_month: { userId: req.userId!, categoryId: input.categoryId, month } } });
+  if (existing) throw new AppError(409, "BUDGET_EXISTS", "A budget already exists for this category and month");
+  const row = await prisma.budget.create({ data: { userId: req.userId!, categoryId: input.categoryId, month, limitAmount: input.limitAmount } });
   res.status(201).json({ success: true, data: { ...row, limitAmount: row.limitAmount.toString() } });
 }));
 financeRouter.patch("/budgets/:id", asyncRoute(async (req, res) => {
   const row = await prisma.budget.findFirst({ where: { id: String(req.params.id), userId: req.userId! } });
   if (!row) throw new AppError(404, "BUDGET_NOT_FOUND", "Budget was not found");
-  const { limitAmount } = z.object({ limitAmount: money }).parse(req.body);
+  const { limitAmount } = budgetInput.pick({ limitAmount: true }).parse(req.body);
   const updated = await prisma.budget.update({ where: { id: row.id }, data: { limitAmount } });
   res.json({ success: true, data: { ...updated, limitAmount: updated.limitAmount.toString() } });
 }));
