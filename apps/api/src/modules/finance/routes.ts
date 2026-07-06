@@ -9,6 +9,7 @@ import { accountInput } from "../accounts/validation.js";
 import { fitsMoneyColumn, signedTransactionAmount, transactionInput } from "../transactions/validation.js";
 import { transferInput } from "../transfers/validation.js";
 import { budgetInput, budgetMonth, budgetMonthDate, budgetProgress } from "../budgets/validation.js";
+import { goalInput, goalProgress, goalUpdateInput } from "../goals/validation.js";
 
 export const financeRouter = Router();
 financeRouter.use(authenticate, requireUnlock);
@@ -177,10 +178,10 @@ financeRouter.delete("/budgets/:id", asyncRoute(async (req, res) => {
 
 financeRouter.get("/goals", asyncRoute(async (req, res) => {
   const rows = await prisma.goal.findMany({ where: { userId: req.userId! }, include: { destinationAccount: true, contributions: { where: { transaction: { deletedAt: null } } } }, orderBy: { createdAt: "desc" } });
-  res.json({ success: true, data: rows.map(g => ({ id: g.id, name: g.name, type: g.type, targetAmount: g.targetAmount.toString(), targetDate: g.targetDate?.toISOString(), status: g.status, destinationAccountId: g.destinationAccountId, destinationAccountName: g.destinationAccount.name, saved: g.contributions.reduce((sum, c) => sum.add(c.amount), new Prisma.Decimal(0)).toString() })) });
+  res.json({ success: true, data: rows.map(g => { const saved = g.contributions.reduce((sum, c) => sum.add(c.amount), new Prisma.Decimal(0)); return { id: g.id, name: g.name, type: g.type, targetAmount: g.targetAmount.toString(), targetDate: g.targetDate?.toISOString(), status: g.status, destinationAccountId: g.destinationAccountId, destinationAccountName: g.destinationAccount.name, saved: saved.toString(), ...goalProgress(g.targetAmount, saved) }; }) });
 }));
 financeRouter.post("/goals", asyncRoute(async (req, res) => {
-  const input = z.object({ destinationAccountId: id, type: z.enum(["SAVINGS", "EMERGENCY_FUND"]), name: z.string().trim().min(1).max(80), targetAmount: money, targetDate: z.coerce.date().optional() }).parse(req.body);
+  const input = goalInput.parse(req.body);
   await ownedAccount(req.userId!, input.destinationAccountId);
   const row = await prisma.goal.create({ data: { ...input, userId: req.userId! } });
   res.status(201).json({ success: true, data: { ...row, targetAmount: row.targetAmount.toString() } });
@@ -188,7 +189,7 @@ financeRouter.post("/goals", asyncRoute(async (req, res) => {
 financeRouter.patch("/goals/:id", asyncRoute(async (req, res) => {
   const goal = await prisma.goal.findFirst({ where: { id: String(req.params.id), userId: req.userId! } });
   if (!goal) throw new AppError(404, "GOAL_NOT_FOUND", "Goal was not found");
-  const input = z.object({ name: z.string().trim().min(1).max(80).optional(), targetAmount: money.optional(), targetDate: z.coerce.date().nullable().optional(), status: z.enum(["ACTIVE", "COMPLETED", "ARCHIVED"]).optional() }).parse(req.body);
+  const input = goalUpdateInput.parse(req.body);
   const row = await prisma.goal.update({ where: { id: goal.id }, data: input });
   res.json({ success: true, data: { ...row, targetAmount: row.targetAmount.toString() } });
 }));

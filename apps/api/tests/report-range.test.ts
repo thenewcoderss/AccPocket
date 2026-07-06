@@ -15,4 +15,10 @@ describe("report period boundaries", () => {
     expect(range.start.toISOString()).toBe("2026-07-01T00:00:00.000Z");
     expect(range.end.toISOString()).toBe("2026-08-01T00:00:00.000Z");
   });
+
+  it("uses an ISO Monday-to-Monday calendar week in the user's timezone", () => {
+    const range = rangeFor("week", "Asia/Dhaka", DateTime.fromISO("2026-07-08T12:00:00Z"));
+    expect(range.start.toISOString()).toBe("2026-07-05T18:00:00.000Z");
+    expect(range.end.toISOString()).toBe("2026-07-12T18:00:00.000Z");
+  });
 });

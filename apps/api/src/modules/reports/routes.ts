@@ -1,21 +1,19 @@
 import { Router } from "express";
-import { z } from "zod";
 import PDFDocument from "pdfkit";
 import ExcelJS from "exceljs";
 import { authenticate, requireUnlock } from "../../middleware/security.js";
 import { asyncRoute } from "../../utils/errors.js";
 import { reportData } from "./service.js";
+import { reportQuery } from "./query.js";
 
 export const reportsRouter = Router();
 reportsRouter.use(authenticate, requireUnlock);
-const querySchema = z.object({ period: z.enum(["day", "week", "month"]).default("month"), from: z.coerce.date().optional(), to: z.coerce.date().optional() }).refine(v => Boolean(v.from) === Boolean(v.to), "from and to must be provided together");
-
-reportsRouter.get("/summary", asyncRoute(async (req, res) => res.json({ success: true, data: await reportData(req.userId!, querySchema.parse(req.query).period, querySchema.parse(req.query).from, querySchema.parse(req.query).to) })));
-reportsRouter.get("/trends", asyncRoute(async (req, res) => res.json({ success: true, data: (await reportData(req.userId!, querySchema.parse(req.query).period)).transactions }))); 
-reportsRouter.get("/categories", asyncRoute(async (req, res) => res.json({ success: true, data: (await reportData(req.userId!, querySchema.parse(req.query).period)).categories }))); 
+reportsRouter.get("/summary", asyncRoute(async (req, res) => { const query = reportQuery.parse(req.query); res.json({ success: true, data: await reportData(req.userId!, query.period, query.from, query.to) }); }));
+reportsRouter.get("/trends", asyncRoute(async (req, res) => { const query = reportQuery.parse(req.query); res.json({ success: true, data: (await reportData(req.userId!, query.period, query.from, query.to)).trend }); }));
+reportsRouter.get("/categories", asyncRoute(async (req, res) => { const query = reportQuery.parse(req.query); res.json({ success: true, data: (await reportData(req.userId!, query.period, query.from, query.to)).categories }); }));
 
 reportsRouter.get("/export/pdf", asyncRoute(async (req, res) => {
-  const q = querySchema.parse(req.query); const report = await reportData(req.userId!, q.period, q.from, q.to);
+  const q = reportQuery.parse(req.query); const report = await reportData(req.userId!, q.period, q.from, q.to);
   const filename = `accpocket-${q.period}-report.pdf`;
   res.setHeader("Content-Type", "application/pdf"); res.setHeader("Content-Disposition", `attachment; filename=\"${filename}\"`);
   const doc = new PDFDocument({ size: "A4", margin: 48 }); doc.pipe(res);
@@ -29,7 +27,7 @@ reportsRouter.get("/export/pdf", asyncRoute(async (req, res) => {
 }));
 
 reportsRouter.get("/export/excel", asyncRoute(async (req, res) => {
-  const q = querySchema.parse(req.query); const report = await reportData(req.userId!, q.period, q.from, q.to);
+  const q = reportQuery.parse(req.query); const report = await reportData(req.userId!, q.period, q.from, q.to);
   const workbook = new ExcelJS.Workbook(); workbook.creator = "AccPocket";
   const summary = workbook.addWorksheet("Summary");
   summary.columns = [{ header: "Metric", key: "metric", width: 24 }, { header: "Value", key: "value", width: 20 }];

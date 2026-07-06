@@ -31,10 +31,10 @@ export interface TransactionDto {
 export interface DashboardDto {
   totalBalance: Money; income: Money; expenses: Money; netCashFlow: Money;
   accounts: AccountDto[]; recentTransactions: TransactionDto[];
-  spendingByCategory: Array<{ name: string; amount: Money; color: string }>;
+  spendingByCategory: Array<{ id?: string; name: string; amount: Money; color: string }>;
   trend: Array<{ label: string; income: Money; expense: Money }>;
-  budgets: Array<{ id: string; name: string; limit: Money; spent: Money }>;
-  goals: Array<{ id: string; name: string; type: GoalType; target: Money; saved: Money }>;
+  budgets: Array<{ id: string; name: string; limit: Money; spent: Money; remaining: Money; overBy: Money; percentage: string }>;
+  goals: Array<{ id: string; name: string; type: GoalType; target: Money; saved: Money; percentage: string }>;
 }
 
 export const DEFAULT_CATEGORIES = {
