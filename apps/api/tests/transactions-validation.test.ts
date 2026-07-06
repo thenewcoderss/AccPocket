@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { signedTransactionAmount, transactionInput } from "../src/modules/transactions/validation.js";
+import { fitsMoneyColumn, signedTransactionAmount, transactionInput } from "../src/modules/transactions/validation.js";
 
 const valid = { accountId: "account-1", type: "INCOME", amount: "10.25", date: "2026-07-06", description: " Salary " };
 
@@ -15,13 +15,25 @@ describe("transaction input validation", () => {
     expect(signedTransactionAmount("EXPENSE", amount).toString()).toBe("-10.25");
   });
 
+  it("detects resulting balances outside Decimal(19,4)", () => {
+    const maximum = transactionInput.parse({ ...valid, amount: "999999999999999.9999" }).amount;
+    expect(fitsMoneyColumn(maximum)).toBe(true);
+    expect(fitsMoneyColumn(maximum.add("0.0001"))).toBe(false);
+  });
+
   it("rejects zero, negative, malformed, and database-overflowing amounts", () => {
     for (const amount of ["0", "0.00", "-1", "01", "1.23456", "1000000000000000", "1e3"]) expect(() => transactionInput.parse({ ...valid, amount })).toThrow();
   });
 
   it("rejects invalid dates and text beyond storage limits", () => {
-    expect(() => transactionInput.parse({ ...valid, date: "not-a-date" })).toThrow();
+    for (const date of ["not-a-date", "2026-02-30", "2026-7-6", "2026-07-06T12:00:00Z", 0]) {
+      expect(() => transactionInput.parse({ ...valid, date })).toThrow();
+    }
     expect(() => transactionInput.parse({ ...valid, description: "a".repeat(121) })).toThrow();
     expect(() => transactionInput.parse({ ...valid, notes: "a".repeat(501) })).toThrow();
+  });
+
+  it("stores a calendar date at UTC midnight", () => {
+    expect(transactionInput.parse(valid).date.toISOString()).toBe("2026-07-06T00:00:00.000Z");
   });
 });

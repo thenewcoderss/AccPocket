@@ -6,7 +6,7 @@ import { prisma } from "../../config/prisma.js";
 import { authenticate, requireUnlock } from "../../middleware/security.js";
 import { AppError, asyncRoute } from "../../utils/errors.js";
 import { accountInput } from "../accounts/validation.js";
-import { signedTransactionAmount, transactionInput } from "../transactions/validation.js";
+import { fitsMoneyColumn, signedTransactionAmount, transactionInput } from "../transactions/validation.js";
 
 export const financeRouter = Router();
 financeRouter.use(authenticate, requireUnlock);
@@ -87,6 +87,7 @@ financeRouter.post("/transactions", asyncRoute(async (req, res) => {
     const settings = await tx.userSettings.findUnique({ where: { userId: req.userId! } });
     const next = account.currentBalance.add(signed);
     if (!settings?.allowNegativeBalances && next.isNegative()) throw new AppError(409, "INSUFFICIENT_BALANCE", "This expense would make the account balance negative");
+    if (!fitsMoneyColumn(next)) throw new AppError(422, "BALANCE_LIMIT", "This transaction would exceed the supported account balance range");
     const transaction = await tx.transaction.create({ data: { userId: req.userId!, categoryId: input.categoryId, type: input.type, date: input.date, description: input.description, notes: input.notes, entries: { create: { accountId: account.id, amount: signed, resultingBalance: next } } } });
     await tx.account.update({ where: { id: account.id }, data: { currentBalance: next } });
     return transaction;
@@ -95,8 +96,14 @@ financeRouter.post("/transactions", asyncRoute(async (req, res) => {
 }));
 financeRouter.delete("/transactions/:id", asyncRoute(async (req, res) => {
   await prisma.$transaction(async tx => {
-    const row = await tx.transaction.findFirst({ where: { id: String(req.params.id), userId: req.userId!, deletedAt: null }, include: { entries: true } });
+    const transactionId = String(req.params.id);
+    const locked = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`SELECT "id" FROM "Transaction" WHERE "id" = ${transactionId} AND "userId" = ${req.userId!} AND "deletedAt" IS NULL FOR UPDATE`);
+    if (!locked.length) throw new AppError(404, "TRANSACTION_NOT_FOUND", "Transaction was not found");
+    const row = await tx.transaction.findFirst({ where: { id: transactionId, userId: req.userId!, deletedAt: null }, include: { entries: true } });
     if (!row) throw new AppError(404, "TRANSACTION_NOT_FOUND", "Transaction was not found");
+    const accountIds = [...new Set(row.entries.map(entry => entry.accountId))].sort();
+    const ownedAccounts = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`SELECT "id" FROM "Account" WHERE "id" IN (${Prisma.join(accountIds)}) AND "userId" = ${req.userId!} ORDER BY "id" FOR UPDATE`);
+    if (ownedAccounts.length !== accountIds.length) throw new AppError(404, "ACCOUNT_NOT_FOUND", "Account was not found");
     for (const entry of row.entries) await tx.account.update({ where: { id: entry.accountId }, data: { currentBalance: { decrement: entry.amount } } });
     await tx.transaction.update({ where: { id: row.id }, data: { deletedAt: new Date() } });
   });
