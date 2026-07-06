@@ -1,0 +1,20 @@
+import { Router } from "express";
+import { Prisma } from "@prisma/client";
+import { z } from "zod";
+import { prisma } from "../../config/prisma.js";
+import { authenticate, requireUnlock } from "../../middleware/security.js";
+import { asyncRoute } from "../../utils/errors.js";
+import { reportData } from "../reports/service.js";
+
+export const dashboardRouter = Router();
+dashboardRouter.use(authenticate, requireUnlock);
+dashboardRouter.get("/", asyncRoute(async (req, res) => {
+  const period = z.enum(["day", "week", "month"]).default("month").parse(req.query.period);
+  const [report, accounts, budgets, goals, recent] = await Promise.all([
+    reportData(req.userId!, period), prisma.account.findMany({ where: { userId: req.userId!, archived: false }, orderBy: { createdAt: "asc" } }),
+    prisma.budget.findMany({ where: { userId: req.userId! }, include: { category: true }, take: 8, orderBy: { month: "desc" } }),
+    prisma.goal.findMany({ where: { userId: req.userId!, status: "ACTIVE" }, include: { contributions: { where: { transaction: { deletedAt: null } } } } }),
+    prisma.transaction.findMany({ where: { userId: req.userId!, deletedAt: null }, include: { category: true, entries: { include: { account: true } } }, orderBy: [{ date: "desc" }, { createdAt: "desc" }], take: 6 })
+  ]);
+  res.json({ success: true, data: { totalBalance: report.totalBalance, income: report.income, expenses: report.expenses, netCashFlow: report.netCashFlow, accounts: accounts.map(a => ({ id: a.id, name: a.name, type: a.type, openingBalance: a.openingBalance.toString(), currentBalance: a.currentBalance.toString(), currency: a.currency, archived: a.archived })), recentTransactions: recent.map(t => ({ id: t.id, type: t.type, amount: (t.entries.find(e => e.amount.isPositive())?.amount ?? t.entries[0]?.amount.abs() ?? 0).toString(), date: t.date.toISOString(), description: t.description, category: t.category, accountName: t.entries[0]?.account.name })), spendingByCategory: report.categories, trend: [], budgets: budgets.map(b => ({ id: b.id, name: b.category.name, limit: b.limitAmount.toString(), spent: report.categories.find(c => c.name === b.category.name)?.amount ?? "0" })), goals: goals.map(g => ({ id: g.id, name: g.name, type: g.type, target: g.targetAmount.toString(), saved: g.contributions.reduce((s, c) => s.add(c.amount), new Prisma.Decimal(0)).toString() })) } });
+}));

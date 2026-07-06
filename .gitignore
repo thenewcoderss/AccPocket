@@ -1,0 +1,32 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# build outputs
+dist/
+build/
+apps/web/dist/
+apps/api/dist/
+
+# environment secrets
+.env
+.env.local
+.env.*.local
+
+# test/build artifacts
+coverage/
+*.log
+.DS_Store
+
+# Codex/temp work folders
+work/
+outputs/
+
+# local database files
+apps/api/prisma/*.db
+apps/api/prisma/*.db-journal
+
+# editor/system files
+.vscode/
+.idea/
+Thumbs.db

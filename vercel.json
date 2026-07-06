@@ -1,0 +1,1 @@
+{ "buildCommand": "pnpm --filter @accpocket/web build", "outputDirectory": "apps/web/dist", "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }] }

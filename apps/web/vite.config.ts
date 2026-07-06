@@ -1,0 +1,4 @@
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import { VitePWA } from "vite-plugin-pwa";
+export default defineConfig({ envDir: "../..", plugins: [react(), VitePWA({ registerType: "prompt", includeAssets: ["offline.html"], manifest: { name: "AccPocket", short_name: "AccPocket", description: "Personal finance and small bookkeeping", theme_color: "#0f766e", background_color: "#f8fafc", display: "standalone", start_url: "/", icons: [{ src: "/icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any maskable" }] }, workbox: { navigateFallback: "/index.html", runtimeCaching: [] } })] });

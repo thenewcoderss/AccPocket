@@ -1,0 +1,220 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum AccountType {
+  CASH
+  BANK
+  MOBILE_WALLET
+  SAVINGS
+  BUSINESS
+  OTHER
+}
+
+enum CategoryType {
+  INCOME
+  EXPENSE
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+  TRANSFER
+}
+
+enum TransactionSource {
+  MANUAL
+  GOAL_CONTRIBUTION
+}
+
+enum GoalType {
+  SAVINGS
+  EMERGENCY_FUND
+}
+
+enum GoalStatus {
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
+model User {
+  id String @id @default(cuid())
+  name String
+  email String @unique
+  passwordHash String
+  defaultCurrency String @default("BDT")
+  timezone String @default("Asia/Dhaka")
+  locale String @default("en-BD")
+  status UserStatus @default(ACTIVE)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  sessions RefreshSession[]
+  passcode PasscodeCredential?
+  accounts Account[]
+  categories Category[]
+  transactions Transaction[]
+  budgets Budget[]
+  goals Goal[]
+  settings UserSettings?
+  auditEvents AuditEvent[]
+}
+
+model RefreshSession {
+  id String @id @default(cuid())
+  userId String
+  tokenHash String @unique
+  familyId String
+  userAgent String?
+  ipAddress String?
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, familyId])
+}
+
+model PasscodeCredential {
+  userId String @id
+  hash String
+  enabled Boolean @default(true)
+  failedAttempts Int @default(0)
+  lockedUntil DateTime?
+  updatedAt DateTime @updatedAt
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Account {
+  id String @id @default(cuid())
+  userId String
+  name String
+  type AccountType
+  openingBalance Decimal @db.Decimal(19, 4)
+  currentBalance Decimal @db.Decimal(19, 4)
+  currency String
+  archived Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entries LedgerEntry[]
+  goals Goal[]
+  @@unique([userId, name])
+  @@index([userId, archived])
+}
+
+model Category {
+  id String @id @default(cuid())
+  userId String
+  name String
+  type CategoryType
+  color String @default("#64748b")
+  icon String @default("tag")
+  system Boolean @default(false)
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+  budgets Budget[]
+  @@unique([userId, type, name])
+}
+
+model Transaction {
+  id String @id @default(cuid())
+  userId String
+  categoryId String?
+  type TransactionType
+  date DateTime
+  description String
+  notes String?
+  source TransactionSource @default(MANUAL)
+  deletedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  entries LedgerEntry[]
+  goalContribution GoalContribution?
+  @@index([userId, date])
+  @@index([userId, type, deletedAt])
+}
+
+model LedgerEntry {
+  id String @id @default(cuid())
+  transactionId String
+  accountId String
+  amount Decimal @db.Decimal(19, 4)
+  resultingBalance Decimal @db.Decimal(19, 4)
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  account Account @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  @@index([accountId, transactionId])
+}
+
+model Budget {
+  id String @id @default(cuid())
+  userId String
+  categoryId String
+  month DateTime
+  limitAmount Decimal @db.Decimal(19, 4)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  @@unique([userId, categoryId, month])
+}
+
+model Goal {
+  id String @id @default(cuid())
+  userId String
+  destinationAccountId String
+  type GoalType
+  name String
+  targetAmount Decimal @db.Decimal(19, 4)
+  targetDate DateTime?
+  status GoalStatus @default(ACTIVE)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  destinationAccount Account @relation(fields: [destinationAccountId], references: [id], onDelete: Restrict)
+  contributions GoalContribution[]
+  @@index([userId, status])
+}
+
+model GoalContribution {
+  id String @id @default(cuid())
+  goalId String
+  transactionId String @unique
+  amount Decimal @db.Decimal(19, 4)
+  date DateTime
+  goal Goal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Restrict)
+}
+
+model UserSettings {
+  userId String @id
+  theme String @default("system")
+  weekStartsOn Int @default(1)
+  reportPeriod String @default("month")
+  passcodeTimeoutMinutes Int @default(5)
+  allowNegativeBalances Boolean @default(false)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AuditEvent {
+  id String @id @default(cuid())
+  userId String?
+  type String
+  metadata Json?
+  createdAt DateTime @default(now())
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  @@index([userId, createdAt])
+}

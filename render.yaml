@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: accpocket-api
+    runtime: node
+    buildCommand: pnpm install --frozen-lockfile && pnpm db:generate && pnpm --filter @accpocket/api build
+    startCommand: pnpm --filter @accpocket/api start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: JWT_UNLOCK_SECRET
+        generateValue: true
+      - key: WEB_ORIGIN
+        sync: false

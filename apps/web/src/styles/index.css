@@ -1,0 +1,37 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * { @apply box-border; }
+  html { @apply bg-slate-50; }
+  body { @apply m-0 bg-slate-50 text-slate-900 antialiased; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  button, input, select, textarea { font: inherit; }
+  button, a { -webkit-tap-highlight-color: transparent; }
+  :focus-visible { @apply outline-none ring-2 ring-pocket-500 ring-offset-2 ring-offset-white; }
+  ::selection { @apply bg-pocket-200 text-pocket-900; }
+}
+
+@layer components {
+  .card { @apply rounded-2xl border border-slate-200 bg-white p-4 shadow-soft sm:p-5; }
+  .card-interactive { @apply card transition duration-200 hover:-translate-y-0.5 hover:border-pocket-200 hover:shadow-card; }
+  .btn { @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold transition duration-150 disabled:cursor-not-allowed disabled:opacity-50; }
+  .btn-primary { @apply btn bg-pocket-700 text-white shadow-button hover:bg-pocket-800 active:bg-pocket-900; }
+  .btn-secondary { @apply btn bg-slate-100 text-slate-700 hover:bg-slate-200 active:bg-slate-300; }
+  .btn-tonal { @apply btn bg-pocket-50 text-pocket-700 hover:bg-pocket-100 active:bg-pocket-200; }
+  .btn-danger { @apply btn bg-red-50 text-red-700 hover:bg-red-100; }
+  .icon-button { @apply inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition; }
+  .input { @apply min-h-12 w-full rounded-xl border border-slate-300 bg-white px-3.5 text-slate-900 shadow-sm transition placeholder:text-slate-400 hover:border-slate-400 focus:border-pocket-500; }
+  .input-amount { @apply input text-xl font-bold tabular-nums; }
+  .label { @apply mb-1.5 block text-sm font-semibold text-slate-700; }
+  .section-title { @apply text-lg font-bold tracking-tight text-slate-900; }
+  .eyebrow { @apply text-xs font-semibold uppercase tracking-wider text-slate-500; }
+  .money { @apply tabular-nums tracking-tight; }
+  .progress-track { @apply h-2 overflow-hidden rounded-full bg-slate-100; }
+  .progress-bar { @apply h-full rounded-full transition-all duration-500; }
+  .status-pill { @apply inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
+}
