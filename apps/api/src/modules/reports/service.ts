@@ -23,7 +23,10 @@ export async function reportData(userId: string, period: "day" | "week" | "month
       const old = categoryMap.get(key);
       categoryMap.set(key, { name: row.category?.name ?? "Uncategorized", color: row.category?.color ?? "#64748b", amount: (old?.amount ?? new Prisma.Decimal(0)).add(amount) });
     }
-    return { id: row.id, date: row.date.toISOString(), type: row.type, description: row.description, category: row.category?.name ?? "—", account: row.entries[0]?.account.name ?? "—", amount: amount.toString() };
+    const sourceAccount = row.entries.find(entry => entry.amount.isNegative())?.account.name;
+    const destinationAccount = row.entries.find(entry => entry.amount.isPositive())?.account.name;
+    const account = row.type === "TRANSFER" ? `${sourceAccount ?? "Account"} → ${destinationAccount ?? "Account"}` : row.entries[0]?.account.name ?? "—";
+    return { id: row.id, date: row.date.toISOString(), type: row.type, description: row.description, category: row.category?.name ?? "—", account, amount: amount.toString() };
   });
   const accounts = await prisma.account.findMany({ where: { userId, archived: false } });
   return { owner: user.name, currency: user.defaultCurrency, period, from: range.start.toISOString(), to: range.end.toISOString(), income: income.toString(), expenses: expenses.toString(), netCashFlow: income.sub(expenses).toString(), totalBalance: accounts.reduce((s, a) => s.add(a.currentBalance), new Prisma.Decimal(0)).toString(), accounts: accounts.map(a => ({ name: a.name, balance: a.currentBalance.toString() })), categories: [...categoryMap.values()].map(c => ({ ...c, amount: c.amount.toString() })), transactions };

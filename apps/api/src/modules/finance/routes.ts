@@ -7,6 +7,7 @@ import { authenticate, requireUnlock } from "../../middleware/security.js";
 import { AppError, asyncRoute } from "../../utils/errors.js";
 import { accountInput } from "../accounts/validation.js";
 import { fitsMoneyColumn, signedTransactionAmount, transactionInput } from "../transactions/validation.js";
+import { transferInput } from "../transfers/validation.js";
 
 export const financeRouter = Router();
 financeRouter.use(authenticate, requireUnlock);
@@ -110,21 +111,29 @@ financeRouter.delete("/transactions/:id", asyncRoute(async (req, res) => {
   res.json({ success: true, data: null });
 }));
 
-const transferSchema = z.object({ sourceAccountId: id, destinationAccountId: id, amount: money, date: z.coerce.date(), description: z.string().trim().min(1).max(120).default("Internal transfer"), goalId: id.optional() });
+const transferSchema = transferInput.extend({ goalId: id.optional() });
 async function createTransfer(userId: string, input: z.infer<typeof transferSchema>) {
   return prisma.$transaction(async tx => {
     if (input.sourceAccountId === input.destinationAccountId) throw new AppError(422, "SAME_ACCOUNT", "Choose two different accounts");
-    const [source, destination] = await Promise.all([ownedAccount(userId, input.sourceAccountId, tx), ownedAccount(userId, input.destinationAccountId, tx)]);
+    const accountIds = [input.sourceAccountId, input.destinationAccountId].sort();
+    const locked = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`SELECT "id" FROM "Account" WHERE "id" IN (${Prisma.join(accountIds)}) AND "userId" = ${userId} ORDER BY "id" FOR UPDATE`);
+    if (locked.length !== 2) throw new AppError(404, "ACCOUNT_NOT_FOUND", "Account was not found");
+    const accounts = await tx.account.findMany({ where: { id: { in: accountIds }, userId } });
+    const source = accounts.find(account => account.id === input.sourceAccountId);
+    const destination = accounts.find(account => account.id === input.destinationAccountId);
+    if (!source || !destination) throw new AppError(404, "ACCOUNT_NOT_FOUND", "Account was not found");
+    if (source.archived || destination.archived) throw new AppError(409, "ACCOUNT_ARCHIVED", "Archived accounts cannot be changed");
     if (source.currency !== destination.currency) throw new AppError(422, "CURRENCY_MISMATCH", "Accounts must use the same currency");
     const settings = await tx.userSettings.findUnique({ where: { userId } });
     const sourceNext = source.currentBalance.sub(input.amount);
     if (!settings?.allowNegativeBalances && sourceNext.isNegative()) throw new AppError(409, "INSUFFICIENT_BALANCE", "Source account has insufficient balance");
     const destinationNext = destination.currentBalance.add(input.amount);
+    if (!fitsMoneyColumn(sourceNext) || !fitsMoneyColumn(destinationNext)) throw new AppError(422, "BALANCE_LIMIT", "This transfer would exceed the supported account balance range");
     if (input.goalId) {
       const goal = await tx.goal.findFirst({ where: { id: input.goalId, userId, destinationAccountId: destination.id, status: "ACTIVE" } });
       if (!goal) throw new AppError(422, "INVALID_GOAL", "Goal and destination account do not match");
     }
-    const transaction = await tx.transaction.create({ data: { userId, type: "TRANSFER", date: input.date, description: input.description, source: input.goalId ? "GOAL_CONTRIBUTION" : "MANUAL", entries: { create: [{ accountId: source.id, amount: input.amount.negated(), resultingBalance: sourceNext }, { accountId: destination.id, amount: input.amount, resultingBalance: destinationNext }] } } });
+    const transaction = await tx.transaction.create({ data: { userId, type: "TRANSFER", date: input.date, description: input.description, notes: input.notes, source: input.goalId ? "GOAL_CONTRIBUTION" : "MANUAL", entries: { create: [{ accountId: source.id, amount: input.amount.negated(), resultingBalance: sourceNext }, { accountId: destination.id, amount: input.amount, resultingBalance: destinationNext }] } } });
     await tx.account.update({ where: { id: source.id }, data: { currentBalance: sourceNext } });
     await tx.account.update({ where: { id: destination.id }, data: { currentBalance: destinationNext } });
     if (input.goalId) await tx.goalContribution.create({ data: { goalId: input.goalId, transactionId: transaction.id, amount: input.amount, date: input.date } });
@@ -182,6 +191,6 @@ financeRouter.patch("/goals/:id", asyncRoute(async (req, res) => {
 financeRouter.post("/goals/:id/contributions", asyncRoute(async (req, res) => {
   const goal = await prisma.goal.findFirst({ where: { id: String(req.params.id), userId: req.userId! } });
   if (!goal) throw new AppError(404, "GOAL_NOT_FOUND", "Goal was not found");
-  const body = z.object({ sourceAccountId: id, amount: money, date: z.coerce.date(), description: z.string().default("Goal contribution") }).parse(req.body);
+  const body = transferInput.omit({ destinationAccountId: true }).parse(req.body);
   res.status(201).json({ success: true, data: await createTransfer(req.userId!, { ...body, destinationAccountId: goal.destinationAccountId, goalId: goal.id }) });
 }));
