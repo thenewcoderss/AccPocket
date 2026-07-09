@@ -45,7 +45,7 @@ export function Accounts() {
     {open && <Modal title="Add account" close={closeForm}><form className="space-y-5" onSubmit={submit}>
       <label className="block"><span className="label">Account name</span><input className="input" name="name" required maxLength={60} autoComplete="off"/></label>
       <label className="block"><span className="label">Type</span><select className="input" name="type">{accountTypes.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}</select></label>
-      <label className="block"><span className="label">Opening balance</span><input className="input-amount" name="openingBalance" type="number" inputMode="decimal" min="0" max="999999999999999.99" step="0.01" defaultValue="0" required/><span className="mt-1.5 block text-xs text-slate-500">Enter the amount currently in this account. Accounts use {user?.defaultCurrency ?? "your default currency"}.</span></label>
+      <label className="block"><span className="label">Opening balance</span><input className="input-amount" name="openingBalance" type="number" inputMode="decimal" min="0" max="999999999999999.9999" step="0.0001" defaultValue="0" required/><span className="mt-1.5 block text-xs text-slate-500">Enter the amount currently in this account, with up to 4 decimal places. Accounts use {user?.defaultCurrency ?? "your default currency"}.</span></label>
       {add.error && <ErrorBox error={add.error}/>}<button className="btn-primary w-full" disabled={add.isPending}>{add.isPending ? "Saving…" : "Save account"}</button>
     </form></Modal>}
   </Page>;

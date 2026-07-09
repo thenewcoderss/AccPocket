@@ -48,8 +48,28 @@ export function Modal({ title, close, children }: { title: string; close(): void
   </div>;
 }
 
+function significantDigits(value: string) {
+  const [whole, fraction = ""] = value.replace(/^-/, "").split(".");
+  return `${whole.replace(/^0+/, "")}${fraction}`.length;
+}
+
+function groupWhole(value: string) {
+  return value.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+export function formatMoney(value: string | number, currency = "BDT") {
+  if (typeof value === "number") return new Intl.NumberFormat("en-BD", { style: "currency", currency, maximumFractionDigits: 2 }).format(value);
+  const trimmed = value.trim();
+  if (!/^-?\d+(\.\d+)?$/.test(trimmed)) return `${currency} ${trimmed}`;
+  if (significantDigits(trimmed) <= 15) return new Intl.NumberFormat("en-BD", { style: "currency", currency, maximumFractionDigits: 2 }).format(Number(trimmed));
+  const sign = trimmed.startsWith("-") ? "-" : "";
+  const [whole, fraction = ""] = trimmed.replace(/^-/, "").split(".");
+  const displayFraction = fraction.replace(/0+$/, "");
+  return `${sign}${currency} ${groupWhole(whole)}${displayFraction ? `.${displayFraction}` : ""}`;
+}
+
 export function Money({ value, currency = "BDT", className = "" }: { value: string | number; currency?: string; className?: string }) {
-  return <span className={`money ${className}`}>{new Intl.NumberFormat("en-BD", { style: "currency", currency, maximumFractionDigits: 2 }).format(Number(value))}</span>;
+  return <span className={`money ${className}`}>{formatMoney(value, currency)}</span>;
 }
 
 export function Progress({ value, label, tone = "brand" }: { value: number; label: string; tone?: "brand" | "warning" | "danger" }) {

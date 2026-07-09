@@ -10,7 +10,7 @@ meRouter.get("/", asyncRoute(async (req, res) => {
   const user = await prisma.user.findUniqueOrThrow({ where: { id: req.userId! }, include: { passcode: true, settings: true } });
   res.json({ success: true, data: { id: user.id, name: user.name, email: user.email, defaultCurrency: user.defaultCurrency, timezone: user.timezone, locale: user.locale, passcodeEnabled: Boolean(user.passcode?.enabled), settings: user.settings } });
 }));
-meRouter.patch("/", asyncRoute(async (req, res) => {
+meRouter.patch("/", requireUnlock, asyncRoute(async (req, res) => {
   const input = z.object({ name: z.string().trim().min(2).max(80).optional(), timezone: z.string().min(1).max(80).optional(), locale: z.string().min(2).max(20).optional() }).parse(req.body);
   const user = await prisma.user.update({ where: { id: req.userId! }, data: input });
   res.json({ success: true, data: { id: user.id, name: user.name, email: user.email, defaultCurrency: user.defaultCurrency, timezone: user.timezone } });
