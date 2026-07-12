@@ -1,5 +1,5 @@
 import type { ApiResponse } from "@accpocket/shared";
-const base = import.meta.env.VITE_API_URL ?? "http://localhost:4000/api/v1";
+const base = import.meta.env.VITE_API_URL ?? (import.meta.env.PROD ? "https://accpocket-api.onrender.com/api/v1" : "http://localhost:4000/api/v1");
 let accessToken: string | null = null;
 let unlockToken: string | null = null;
 let refreshPromise: Promise<string | null> | null = null;
