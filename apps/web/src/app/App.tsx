@@ -1,4 +1,58 @@
-import { Navigate, Outlet, Route, Routes } from "react-router-dom"; import { Shell } from "./Shell"; import { useAuth } from "../store/auth"; import { InstallPrompt } from "../components/InstallPrompt"; import { Spinner } from "../components/ui"; import { AuthPage, UnlockPage } from "../features/auth/AuthPages"; import { Dashboard } from "../features/dashboard/Dashboard"; import { Accounts } from "../features/accounts/Accounts"; import { Transactions } from "../features/transactions/Transactions"; import { Planning } from "../features/planning/Planning"; import { Reports } from "../features/reports/Reports"; import { Calculator } from "../features/calculator/Calculator"; import { More, Settings } from "../features/settings/Settings";
-function Protected(){const a=useAuth();if(!a.ready)return<Spinner/>;if(!a.user)return<Navigate to="/login"/>;if(a.user.passcodeEnabled&&!a.unlocked)return<Navigate to="/unlock"/>;return<Shell/>}
-function CalculatorAccess(){const auth=useAuth();if(!auth.ready)return<Spinner/>;if(auth.user?.passcodeEnabled&&!auth.unlocked)return<Navigate to="/unlock"/>;return auth.user?<Shell/>:<Outlet/>}
-export function App(){return<><Routes><Route path="/login" element={<AuthPage/>}/><Route path="/signup" element={<AuthPage signup/>}/><Route path="/unlock" element={<UnlockPage/>}/><Route element={<CalculatorAccess/>}><Route path="calculator" element={<Calculator/>}/></Route><Route element={<Protected/>}><Route index element={<Dashboard/>}/><Route path="accounts" element={<Accounts/>}/><Route path="transactions" element={<Transactions/>}/><Route path="planning" element={<Planning/>}/><Route path="reports" element={<Reports/>}/><Route path="settings" element={<Settings/>}/><Route path="more" element={<More/>}/></Route><Route path="*" element={<Navigate to="/"/>}/></Routes><InstallPrompt/></>}
+import { lazy, Suspense } from "react";
+import { Navigate, Outlet, Route, Routes } from "react-router-dom";
+import { InstallPrompt } from "../components/InstallPrompt";
+import { Spinner } from "../components/ui";
+import { useAuth } from "../store/auth";
+import { Shell } from "./Shell";
+
+const AuthPage = lazy(() => import("../features/auth/AuthPages").then(module => ({ default: module.AuthPage })));
+const UnlockPage = lazy(() => import("../features/auth/AuthPages").then(module => ({ default: module.UnlockPage })));
+const Dashboard = lazy(() => import("../features/dashboard/Dashboard").then(module => ({ default: module.Dashboard })));
+const Accounts = lazy(() => import("../features/accounts/Accounts").then(module => ({ default: module.Accounts })));
+const Transactions = lazy(() => import("../features/transactions/Transactions").then(module => ({ default: module.Transactions })));
+const Planning = lazy(() => import("../features/planning/Planning").then(module => ({ default: module.Planning })));
+const Reports = lazy(() => import("../features/reports/Reports").then(module => ({ default: module.Reports })));
+const Calculator = lazy(() => import("../features/calculator/Calculator").then(module => ({ default: module.Calculator })));
+const Settings = lazy(() => import("../features/settings/Settings").then(module => ({ default: module.Settings })));
+const More = lazy(() => import("../features/settings/Settings").then(module => ({ default: module.More })));
+
+function Protected() {
+  const auth = useAuth();
+  if (!auth.ready) return <Spinner/>;
+  if (!auth.user) return <Navigate to="/login"/>;
+  if (auth.user.passcodeEnabled && !auth.unlocked) return <Navigate to="/unlock"/>;
+  return <Shell/>;
+}
+
+function CalculatorAccess() {
+  const auth = useAuth();
+  if (!auth.ready) return <Spinner/>;
+  if (auth.user?.passcodeEnabled && !auth.unlocked) return <Navigate to="/unlock"/>;
+  return auth.user ? <Shell/> : <Outlet/>;
+}
+
+export function App() {
+  return <>
+    <Suspense fallback={<Spinner/>}>
+      <Routes>
+        <Route path="/login" element={<AuthPage/>}/>
+        <Route path="/signup" element={<AuthPage signup/>}/>
+        <Route path="/unlock" element={<UnlockPage/>}/>
+        <Route element={<CalculatorAccess/>}>
+          <Route path="calculator" element={<Calculator/>}/>
+        </Route>
+        <Route element={<Protected/>}>
+          <Route index element={<Dashboard/>}/>
+          <Route path="accounts" element={<Accounts/>}/>
+          <Route path="transactions" element={<Transactions/>}/>
+          <Route path="planning" element={<Planning/>}/>
+          <Route path="reports" element={<Reports/>}/>
+          <Route path="settings" element={<Settings/>}/>
+          <Route path="more" element={<More/>}/>
+        </Route>
+        <Route path="*" element={<Navigate to="/"/>}/>
+      </Routes>
+    </Suspense>
+    <InstallPrompt/>
+  </>;
+}
