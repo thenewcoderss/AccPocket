@@ -13,6 +13,11 @@ apps/api/dist/
 .env.local
 .env.*.local
 
+# local Windows runtime shims
+pnpm.cmd
+pnpmg.cmd
+node.cmd
+
 # test/build artifacts
 coverage/
 *.log
