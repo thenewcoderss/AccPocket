@@ -1,6 +1,37 @@
 {
-  "name": "@accpocket/web", "version": "1.0.0", "private": true, "type": "module",
-  "scripts": { "dev": "vite", "build": "tsc --noEmit && vite build", "typecheck": "tsc --noEmit", "test": "vitest run" },
-  "dependencies": { "@accpocket/shared": "workspace:*", "@tanstack/react-query": "^5.80.2", "lucide-react": "^0.511.0", "react": "^19.1.0", "react-dom": "^19.1.0", "react-router-dom": "^7.6.2", "recharts": "^2.15.3", "workbox-window": "^7.3.0" },
-  "devDependencies": { "@testing-library/jest-dom": "^6.6.3", "@testing-library/react": "^16.3.0", "@types/react": "^19.1.6", "@types/react-dom": "^19.1.5", "@vitejs/plugin-react": "^4.5.0", "autoprefixer": "^10.4.21", "postcss": "^8.5.4", "tailwindcss": "^3.4.17", "typescript": "^5.8.3", "vite": "^6.3.5", "vite-plugin-pwa": "^1.0.0", "vitest": "^3.1.4" }
+  "name": "@accpocket/web",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@accpocket/shared": "workspace:*",
+    "@tanstack/react-query": "^5.80.2",
+    "@vercel/speed-insights": "^2.0.0",
+    "lucide-react": "^0.511.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-router-dom": "^7.6.2",
+    "recharts": "^2.15.3",
+    "workbox-window": "^7.3.0"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.3.0",
+    "@types/react": "^19.1.6",
+    "@types/react-dom": "^19.1.5",
+    "@vitejs/plugin-react": "^4.5.0",
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.4",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5",
+    "vite-plugin-pwa": "^1.0.0",
+    "vitest": "^3.1.4"
+  }
 }
