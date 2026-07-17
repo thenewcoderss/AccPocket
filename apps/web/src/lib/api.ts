@@ -29,7 +29,13 @@ function refreshAccess() {
 async function raw<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
   const headers = new Headers(init.headers); if (init.body && !(init.body instanceof FormData)) headers.set("content-type", "application/json");
   if (accessToken) headers.set("authorization", `Bearer ${accessToken}`); if (unlockToken) headers.set("x-unlock-token", unlockToken);
-  const response = await fetch(`${base}${path}`, { ...init, headers, credentials: "include" });
+  let response: Response;
+  try {
+    response = await fetch(`${base}${path}`, { ...init, headers, credentials: "include" });
+  } catch (caught) {
+    if (caught instanceof TypeError) throw new Error("Unable to reach AccPocket API. Check your connection and try again.");
+    throw caught;
+  }
   if (response.status === 401 && retry && !path.startsWith("/auth/")) { const refreshed = await refreshAccess(); if (refreshed) return raw<T>(path, init, false); }
   const payload = await response.json() as ApiResponse<T>;
   if (!payload.success) { const error = new Error(payload.error.message) as Error & { code: string; status: number }; error.code = payload.error.code; error.status = response.status; throw error; }
