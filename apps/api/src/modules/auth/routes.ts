@@ -11,7 +11,7 @@ import { hashToken, signAccess, signRefresh, verifyRefresh } from "../../service
 
 export const authRouter = Router();
 const credentials = z.object({ email: z.string().email().transform(v => v.trim().toLowerCase()), password: z.string().min(10).max(128) });
-const cookie = { httpOnly: true, secure: env.NODE_ENV === "production", sameSite: "lax" as const, path: "/api/v1/auth", maxAge: 30 * 86400000 };
+const cookie = { httpOnly: true, secure: env.NODE_ENV === "production", sameSite: (env.NODE_ENV === "production" ? "none" : "lax") as "none" | "lax", path: "/api/v1/auth", maxAge: 30 * 86400000 };
 
 async function createSession(userId: string, req: { headers: { [key: string]: unknown }; ip?: string }) {
   const familyId = crypto.randomUUID();

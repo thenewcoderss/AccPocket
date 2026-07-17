@@ -1,7 +1,7 @@
-import { lazy, Suspense } from "react";
+import { Component, lazy, Suspense, type ErrorInfo, type ReactNode } from "react";
 import { Navigate, Outlet, Route, Routes } from "react-router-dom";
 import { InstallPrompt } from "../components/InstallPrompt";
-import { Spinner } from "../components/ui";
+import { ErrorBox, Page, Spinner } from "../components/ui";
 import { useAuth } from "../store/auth";
 import { Shell } from "./Shell";
 
@@ -15,6 +15,16 @@ const Reports = lazy(() => import("../features/reports/Reports").then(module => 
 const Calculator = lazy(() => import("../features/calculator/Calculator").then(module => ({ default: module.Calculator })));
 const Settings = lazy(() => import("../features/settings/Settings").then(module => ({ default: module.Settings })));
 const More = lazy(() => import("../features/settings/Settings").then(module => ({ default: module.More })));
+
+class LazyLoadBoundary extends Component<{ children: ReactNode }, { error: unknown }> {
+  state = { error: null as unknown };
+  static getDerivedStateFromError(error: unknown) { return { error }; }
+  componentDidCatch(error: unknown, info: ErrorInfo) { console.error("Route failed to load", error, info); }
+  render() {
+    if (this.state.error) return <Page title="Unable to load this screen"><ErrorBox error={this.state.error}/><button className="btn-secondary mt-3" onClick={() => location.reload()}>Reload AccPocket</button></Page>;
+    return this.props.children;
+  }
+}
 
 function Protected() {
   const auth = useAuth();
@@ -33,26 +43,28 @@ function CalculatorAccess() {
 
 export function App() {
   return <>
-    <Suspense fallback={<Spinner/>}>
-      <Routes>
-        <Route path="/login" element={<AuthPage/>}/>
-        <Route path="/signup" element={<AuthPage signup/>}/>
-        <Route path="/unlock" element={<UnlockPage/>}/>
-        <Route element={<CalculatorAccess/>}>
-          <Route path="calculator" element={<Calculator/>}/>
-        </Route>
-        <Route element={<Protected/>}>
-          <Route index element={<Dashboard/>}/>
-          <Route path="accounts" element={<Accounts/>}/>
-          <Route path="transactions" element={<Transactions/>}/>
-          <Route path="planning" element={<Planning/>}/>
-          <Route path="reports" element={<Reports/>}/>
-          <Route path="settings" element={<Settings/>}/>
-          <Route path="more" element={<More/>}/>
-        </Route>
-        <Route path="*" element={<Navigate to="/"/>}/>
-      </Routes>
-    </Suspense>
+    <LazyLoadBoundary>
+      <Suspense fallback={<Spinner/>}>
+        <Routes>
+          <Route path="/login" element={<AuthPage/>}/>
+          <Route path="/signup" element={<AuthPage signup/>}/>
+          <Route path="/unlock" element={<UnlockPage/>}/>
+          <Route element={<CalculatorAccess/>}>
+            <Route path="calculator" element={<Calculator/>}/>
+          </Route>
+          <Route element={<Protected/>}>
+            <Route index element={<Dashboard/>}/>
+            <Route path="accounts" element={<Accounts/>}/>
+            <Route path="transactions" element={<Transactions/>}/>
+            <Route path="planning" element={<Planning/>}/>
+            <Route path="reports" element={<Reports/>}/>
+            <Route path="settings" element={<Settings/>}/>
+            <Route path="more" element={<More/>}/>
+          </Route>
+          <Route path="*" element={<Navigate to="/"/>}/>
+        </Routes>
+      </Suspense>
+    </LazyLoadBoundary>
     <InstallPrompt/>
   </>;
 }

@@ -19,19 +19,19 @@ const serializeAccount = (a: { id: string; name: string; type: string; openingBa
 
 async function ownedAccount(userId: string, accountId: string, tx: Prisma.TransactionClient = prisma) {
   const account = await tx.account.findFirst({ where: { id: accountId, userId } });
-  if (!account) throw new AppError(404, "ACCOUNT_NOT_FOUND", "Account was not found");
-  if (account.archived) throw new AppError(409, "ACCOUNT_ARCHIVED", "Archived accounts cannot be changed");
+  if (!account) throw new AppError(404, "ACCOUNT_NOT_FOUND", "Wallet was not found");
+  if (account.archived) throw new AppError(409, "ACCOUNT_ARCHIVED", "Archived wallets cannot be changed");
   return account;
 }
 
 async function lockOwnedAccount(userId: string, accountId: string, tx: Prisma.TransactionClient) {
   const rows = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`SELECT "id" FROM "Account" WHERE "id" = ${accountId} AND "userId" = ${userId} FOR UPDATE`);
-  if (!rows.length) throw new AppError(404, "ACCOUNT_NOT_FOUND", "Account was not found");
+  if (!rows.length) throw new AppError(404, "ACCOUNT_NOT_FOUND", "Wallet was not found");
   return ownedAccount(userId, accountId, tx);
 }
 
 financeRouter.get("/accounts", asyncRoute(async (req, res) => {
-  const rows = await prisma.account.findMany({ where: { userId: req.userId! }, orderBy: { createdAt: "asc" } });
+  const rows = await prisma.account.findMany({ where: { userId: req.userId! }, select: { id: true, name: true, type: true, openingBalance: true, currentBalance: true, currency: true, archived: true }, orderBy: { createdAt: "asc" } });
   res.json({ success: true, data: rows.map(serializeAccount) });
 }));
 financeRouter.post("/accounts", asyncRoute(async (req, res) => {
@@ -55,7 +55,7 @@ financeRouter.delete("/accounts/:id", asyncRoute(async (req, res) => {
 }));
 
 financeRouter.get("/categories", asyncRoute(async (req, res) => {
-  res.json({ success: true, data: await prisma.category.findMany({ where: { userId: req.userId! }, orderBy: [{ type: "asc" }, { name: "asc" }] }) });
+  res.json({ success: true, data: await prisma.category.findMany({ where: { userId: req.userId! }, select: { id: true, name: true, type: true, color: true, icon: true, system: true, createdAt: true }, orderBy: [{ type: "asc" }, { name: "asc" }] }) });
 }));
 financeRouter.post("/categories", asyncRoute(async (req, res) => {
   const input = z.object({ name: z.string().trim().min(1).max(40), type: z.enum(["INCOME", "EXPENSE"]), color: z.string().regex(/^#[0-9a-f]{6}$/i).default("#64748b"), icon: z.string().max(30).default("tag") }).parse(req.body);
@@ -78,7 +78,7 @@ async function assertCategory(userId: string, categoryId: string | undefined, ty
 financeRouter.get("/transactions", asyncRoute(async (req, res) => {
   const query = z.object({ type: z.enum(["INCOME", "EXPENSE", "TRANSFER"]).optional(), accountId: z.string().optional(), page: z.coerce.number().int().positive().default(1), limit: z.coerce.number().int().min(1).max(100).default(30) }).parse(req.query);
   const where: Prisma.TransactionWhereInput = { userId: req.userId!, deletedAt: null, type: query.type, entries: query.accountId ? { some: { accountId: query.accountId } } : undefined };
-  const [rows, total] = await prisma.$transaction([prisma.transaction.findMany({ where, include: { category: true, entries: { include: { account: true } } }, orderBy: [{ date: "desc" }, { createdAt: "desc" }], skip: (query.page - 1) * query.limit, take: query.limit }), prisma.transaction.count({ where })]);
+  const [rows, total] = await prisma.$transaction([prisma.transaction.findMany({ where, select: { id: true, type: true, date: true, description: true, category: true, entries: { select: { amount: true, account: { select: { name: true } } } } }, orderBy: [{ date: "desc" }, { createdAt: "desc" }], skip: (query.page - 1) * query.limit, take: query.limit }), prisma.transaction.count({ where })]);
   res.json({ success: true, data: { items: rows.map(row => ({ id: row.id, type: row.type, amount: row.entries.find(e => e.amount.isPositive())?.amount.abs().toString() ?? row.entries[0]?.amount.abs().toString(), date: row.date.toISOString(), description: row.description, category: row.category, accountName: row.entries.find(e => e.amount.isNegative())?.account.name ?? row.entries[0]?.account.name, destinationAccountName: row.type === "TRANSFER" ? row.entries.find(e => e.amount.isPositive())?.account.name : undefined })), page: query.page, total } });
 }));
 financeRouter.post("/transactions", asyncRoute(async (req, res) => {
@@ -89,8 +89,8 @@ financeRouter.post("/transactions", asyncRoute(async (req, res) => {
     const signed = signedTransactionAmount(input.type, input.amount);
     const settings = await tx.userSettings.findUnique({ where: { userId: req.userId! } });
     const next = account.currentBalance.add(signed);
-    if (!settings?.allowNegativeBalances && next.isNegative()) throw new AppError(409, "INSUFFICIENT_BALANCE", "This expense would make the account balance negative");
-    if (!fitsMoneyColumn(next)) throw new AppError(422, "BALANCE_LIMIT", "This transaction would exceed the supported account balance range");
+    if (!settings?.allowNegativeBalances && next.isNegative()) throw new AppError(409, "INSUFFICIENT_BALANCE", "This expense would make the wallet balance negative");
+    if (!fitsMoneyColumn(next)) throw new AppError(422, "BALANCE_LIMIT", "This transaction would exceed the supported wallet balance range");
     const transaction = await tx.transaction.create({ data: { userId: req.userId!, categoryId: input.categoryId, type: input.type, date: input.date, description: input.description, notes: input.notes, entries: { create: { accountId: account.id, amount: signed, resultingBalance: next } } } });
     await tx.account.update({ where: { id: account.id }, data: { currentBalance: next } });
     return transaction;
@@ -106,7 +106,7 @@ financeRouter.delete("/transactions/:id", asyncRoute(async (req, res) => {
     if (!row) throw new AppError(404, "TRANSACTION_NOT_FOUND", "Transaction was not found");
     const accountIds = [...new Set(row.entries.map(entry => entry.accountId))].sort();
     const ownedAccounts = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`SELECT "id" FROM "Account" WHERE "id" IN (${Prisma.join(accountIds)}) AND "userId" = ${req.userId!} ORDER BY "id" FOR UPDATE`);
-    if (ownedAccounts.length !== accountIds.length) throw new AppError(404, "ACCOUNT_NOT_FOUND", "Account was not found");
+    if (ownedAccounts.length !== accountIds.length) throw new AppError(404, "ACCOUNT_NOT_FOUND", "Wallet was not found");
     for (const entry of row.entries) await tx.account.update({ where: { id: entry.accountId }, data: { currentBalance: { decrement: entry.amount } } });
     await tx.transaction.update({ where: { id: row.id }, data: { deletedAt: new Date() } });
   });
@@ -116,24 +116,24 @@ financeRouter.delete("/transactions/:id", asyncRoute(async (req, res) => {
 const transferSchema = transferInput.extend({ goalId: id.optional() });
 async function createTransfer(userId: string, input: z.infer<typeof transferSchema>) {
   return prisma.$transaction(async tx => {
-    if (input.sourceAccountId === input.destinationAccountId) throw new AppError(422, "SAME_ACCOUNT", "Choose two different accounts");
+    if (input.sourceAccountId === input.destinationAccountId) throw new AppError(422, "SAME_ACCOUNT", "Choose two different wallets");
     const accountIds = [input.sourceAccountId, input.destinationAccountId].sort();
     const locked = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`SELECT "id" FROM "Account" WHERE "id" IN (${Prisma.join(accountIds)}) AND "userId" = ${userId} ORDER BY "id" FOR UPDATE`);
-    if (locked.length !== 2) throw new AppError(404, "ACCOUNT_NOT_FOUND", "Account was not found");
+    if (locked.length !== 2) throw new AppError(404, "ACCOUNT_NOT_FOUND", "Wallet was not found");
     const accounts = await tx.account.findMany({ where: { id: { in: accountIds }, userId } });
     const source = accounts.find(account => account.id === input.sourceAccountId);
     const destination = accounts.find(account => account.id === input.destinationAccountId);
-    if (!source || !destination) throw new AppError(404, "ACCOUNT_NOT_FOUND", "Account was not found");
-    if (source.archived || destination.archived) throw new AppError(409, "ACCOUNT_ARCHIVED", "Archived accounts cannot be changed");
-    if (source.currency !== destination.currency) throw new AppError(422, "CURRENCY_MISMATCH", "Accounts must use the same currency");
+    if (!source || !destination) throw new AppError(404, "ACCOUNT_NOT_FOUND", "Wallet was not found");
+    if (source.archived || destination.archived) throw new AppError(409, "ACCOUNT_ARCHIVED", "Archived wallets cannot be changed");
+    if (source.currency !== destination.currency) throw new AppError(422, "CURRENCY_MISMATCH", "Wallets must use the same currency");
     const settings = await tx.userSettings.findUnique({ where: { userId } });
     const sourceNext = source.currentBalance.sub(input.amount);
-    if (!settings?.allowNegativeBalances && sourceNext.isNegative()) throw new AppError(409, "INSUFFICIENT_BALANCE", "Source account has insufficient balance");
+    if (!settings?.allowNegativeBalances && sourceNext.isNegative()) throw new AppError(409, "INSUFFICIENT_BALANCE", "Source wallet has insufficient balance");
     const destinationNext = destination.currentBalance.add(input.amount);
-    if (!fitsMoneyColumn(sourceNext) || !fitsMoneyColumn(destinationNext)) throw new AppError(422, "BALANCE_LIMIT", "This transfer would exceed the supported account balance range");
+    if (!fitsMoneyColumn(sourceNext) || !fitsMoneyColumn(destinationNext)) throw new AppError(422, "BALANCE_LIMIT", "This transfer would exceed the supported wallet balance range");
     if (input.goalId) {
       const goal = await tx.goal.findFirst({ where: { id: input.goalId, userId, destinationAccountId: destination.id, status: "ACTIVE" } });
-      if (!goal) throw new AppError(422, "INVALID_GOAL", "Goal and destination account do not match");
+      if (!goal) throw new AppError(422, "INVALID_GOAL", "Goal and destination wallet do not match");
     }
     const transaction = await tx.transaction.create({ data: { userId, type: "TRANSFER", date: input.date, description: input.description, notes: input.notes, source: input.goalId ? "GOAL_CONTRIBUTION" : "MANUAL", entries: { create: [{ accountId: source.id, amount: input.amount.negated(), resultingBalance: sourceNext }, { accountId: destination.id, amount: input.amount, resultingBalance: destinationNext }] } } });
     await tx.account.update({ where: { id: source.id }, data: { currentBalance: sourceNext } });
@@ -150,8 +150,9 @@ financeRouter.get("/budgets", asyncRoute(async (req, res) => {
   const rows = await prisma.budget.findMany({ where: { userId: req.userId!, month: start.toJSDate() }, include: { category: true }, orderBy: { category: { name: "asc" } } });
   const spent = await prisma.ledgerEntry.groupBy({ by: ["transactionId"], where: { transaction: { userId: req.userId!, type: "EXPENSE", deletedAt: null, date: { gte: start.toJSDate(), lt: start.plus({ months: 1 }).toJSDate() } } }, _sum: { amount: true } });
   const txs = await prisma.transaction.findMany({ where: { id: { in: spent.map(s => s.transactionId) } }, select: { id: true, categoryId: true } });
+  const txCategories = new Map(txs.map(tx => [tx.id, tx.categoryId]));
   const sums = new Map<string, Prisma.Decimal>();
-  for (const item of spent) { const category = txs.find(t => t.id === item.transactionId)?.categoryId; if (category) sums.set(category, (sums.get(category) ?? new Prisma.Decimal(0)).add(item._sum.amount?.abs() ?? 0)); }
+  for (const item of spent) { const category = txCategories.get(item.transactionId); if (category) sums.set(category, (sums.get(category) ?? new Prisma.Decimal(0)).add(item._sum.amount?.abs() ?? 0)); }
   res.json({ success: true, data: rows.map(b => { const amount = sums.get(b.categoryId) ?? new Prisma.Decimal(0); return { id: b.id, categoryId: b.categoryId, name: b.category.name, color: b.category.color, month: monthText, limit: b.limitAmount.toString(), spent: amount.toString(), ...budgetProgress(b.limitAmount, amount) }; }) });
 }));
 financeRouter.post("/budgets", asyncRoute(async (req, res) => {

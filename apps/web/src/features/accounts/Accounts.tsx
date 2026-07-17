@@ -17,11 +17,11 @@ export function Accounts() {
   const [open, setOpen] = useState(false);
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const accounts = useQuery({ queryKey: ["accounts"], queryFn: () => api.get<AccountDto[]>("/accounts") });
+  const accounts = useQuery({ queryKey: ["accounts"], queryFn: ({ signal }) => api.get<AccountDto[]>("/accounts", { signal }) });
   const availableAccounts = activeAccounts(accounts.data);
   const add = useMutation({
     mutationFn: (body: { name: string; type: AccountType; openingBalance: string }) => api.post<AccountDto>("/accounts", body),
-    onSuccess: () => { void queryClient.invalidateQueries(); setOpen(false); }
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ["accounts"] }); void queryClient.invalidateQueries({ queryKey: ["dashboard"] }); void queryClient.invalidateQueries({ queryKey: ["report"] }); setOpen(false); }
   });
 
   function openForm() { add.reset(); setOpen(true); }
@@ -33,7 +33,7 @@ export function Accounts() {
   }
 
   if (accounts.isLoading) return <Spinner/>;
-  return <Page title="Accounts" description="Everything you track, in one place." action={<button className="btn-primary" onClick={openForm}><Plus size={18}/>Add</button>}>
+  return <Page title="Wallet" description="Everything you track, in one place." action={<button className="btn-primary" onClick={openForm}><Plus size={18}/>Add wallet</button>}>
     {accounts.error && <div><ErrorBox error={accounts.error}/><button className="btn-secondary mt-3" onClick={() => void accounts.refetch()}>Try again</button></div>}
     {!accounts.error && <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {availableAccounts.map(account => <article className="card-interactive min-w-0" key={account.id}>
@@ -41,12 +41,12 @@ export function Accounts() {
         <h2 className="mt-6 truncate font-semibold text-slate-700">{account.name}</h2><p className="mt-1 text-xs text-slate-500">Current balance</p><Money value={account.currentBalance} currency={account.currency} className="mt-0.5 block break-words text-2xl font-bold"/>
       </article>)}
     </div>}
-    {!accounts.error && !availableAccounts.length && <Empty title="No accounts" text="Add cash, bank, wallet, savings, or business accounts." action={<button className="btn-primary" onClick={openForm}><Plus size={18}/>Add account</button>}/>} 
-    {open && <Modal title="Add account" close={closeForm}><form className="space-y-5" onSubmit={submit}>
-      <label className="block"><span className="label">Account name</span><input className="input" name="name" required maxLength={60} autoComplete="off"/></label>
+    {!accounts.error && !availableAccounts.length && <Empty title="No wallets" text="Add cash, bank, mobile wallet, savings, or business wallets." action={<button className="btn-primary" onClick={openForm}><Plus size={18}/>Add wallet</button>}/>}
+    {open && <Modal title="Add wallet" close={closeForm}><form className="space-y-5" onSubmit={submit}>
+      <label className="block"><span className="label">Wallet name</span><input className="input" name="name" required maxLength={60} autoComplete="off"/></label>
       <label className="block"><span className="label">Type</span><select className="input" name="type">{accountTypes.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}</select></label>
-      <label className="block"><span className="label">Opening balance</span><input className="input-amount" name="openingBalance" type="number" inputMode="decimal" min="0" max="999999999999999.9999" step="0.0001" defaultValue="0" required/><span className="mt-1.5 block text-xs text-slate-500">Enter the amount currently in this account, with up to 4 decimal places. Accounts use {user?.defaultCurrency ?? "your default currency"}.</span></label>
-      {add.error && <ErrorBox error={add.error}/>}<button className="btn-primary w-full" disabled={add.isPending}>{add.isPending ? "Saving…" : "Save account"}</button>
+      <label className="block"><span className="label">Opening balance</span><input className="input-amount" name="openingBalance" type="number" inputMode="decimal" min="0" max="999999999999999.9999" step="0.0001" defaultValue="0" required/><span className="mt-1.5 block text-xs text-slate-500">Enter the amount currently in this wallet, with up to 4 decimal places. Wallets use {user?.defaultCurrency ?? "your default currency"}.</span></label>
+      {add.error && <ErrorBox error={add.error}/>}<button className="btn-primary w-full" disabled={add.isPending}>{add.isPending ? "Saving…" : "Save wallet"}</button>
     </form></Modal>}
   </Page>;
 }

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { signAccess, signRefresh, signUnlock, verifyAccess, verifyRefresh, verifyUnlock } from "../src/services/tokens.js";
+
+process.env.DATABASE_URL = "postgresql://user:pass@localhost:5432/accpocket_test";
+process.env.JWT_ACCESS_SECRET = "test-access-secret-value-32-chars";
+process.env.JWT_REFRESH_SECRET = "test-refresh-secret-value-32-chars";
+process.env.JWT_UNLOCK_SECRET = "test-unlock-secret-value-32-chars";
+
+const { signAccess, signRefresh, signUnlock, verifyAccess, verifyRefresh, verifyUnlock } = await import("../src/services/tokens.js");
 
 describe("authentication tokens", () => {
   it("signs purpose-specific access, refresh, and unlock claims", () => {

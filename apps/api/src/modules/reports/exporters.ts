@@ -30,8 +30,8 @@ export async function buildPdf(report: Report) {
   doc.moveDown().fontSize(11).fillColor("#0f172a");
   for (const [label, value] of [["Total balance", report.totalBalance], ["Income", report.income], ["Expenses", report.expenses], ["Net cash flow", report.netCashFlow]] as const) doc.text(`${label}: ${moneyText(report.currency, value)}`);
 
-  section("Account balances");
-  if (!report.accounts.length) line("No active accounts.", "#64748b");
+  section("Wallet balances");
+  if (!report.accounts.length) line("No active wallets.", "#64748b");
   for (const account of report.accounts) line(`${account.name}: ${moneyText(account.currency, account.balance)}`);
 
   section("Expense categories");
@@ -67,10 +67,10 @@ export function buildWorkbook(report: Report) {
   summary.addRows([{ metric: "Owner", value: report.owner }, { metric: "Period", value: report.period }, { metric: "From", value: report.from.slice(0, 10) }, { metric: "To", value: new Date(new Date(report.to).getTime() - 1).toISOString().slice(0, 10) }, { metric: "Currency", value: report.currency }, { metric: "Total Balance", value: excelMoney(report.totalBalance) }, { metric: "Income", value: excelMoney(report.income) }, { metric: "Expenses", value: excelMoney(report.expenses) }, { metric: "Net Cash Flow", value: excelMoney(report.netCashFlow) }]);
   styleSheet(summary, [2]);
 
-  const accounts = workbook.addWorksheet("Accounts");
-  accounts.columns = [{ header: "Account", key: "name", width: 30 }, { header: "Currency", key: "currency", width: 12 }, { header: "Current Balance", key: "balance", width: 24 }];
+  const accounts = workbook.addWorksheet("Wallet");
+  accounts.columns = [{ header: "Wallet", key: "name", width: 30 }, { header: "Currency", key: "currency", width: 12 }, { header: "Current Balance", key: "balance", width: 24 }];
   accounts.addRows(report.accounts.map(account => ({ ...account, balance: excelMoney(account.balance) })) as never[]); styleSheet(accounts, [3]);
-  if (!report.accounts.length) accounts.addRow({ name: "No active accounts" });
+  if (!report.accounts.length) accounts.addRow({ name: "No active wallets" });
 
   const categories = workbook.addWorksheet("Categories");
   categories.columns = [{ header: "Expense Category", key: "name", width: 30 }, { header: "Amount", key: "amount", width: 24 }];
@@ -78,12 +78,12 @@ export function buildWorkbook(report: Report) {
   if (!report.categories.length) categories.addRow({ name: "No expense transactions in this period" });
 
   const biggest = workbook.addWorksheet("Biggest Expenses");
-  biggest.columns = [{ header: "Date", key: "date", width: 14 }, { header: "Description", key: "description", width: 36 }, { header: "Account", key: "account", width: 28 }, { header: "Amount", key: "amount", width: 24 }];
+  biggest.columns = [{ header: "Date", key: "date", width: 14 }, { header: "Description", key: "description", width: 36 }, { header: "Wallet", key: "account", width: 28 }, { header: "Amount", key: "amount", width: 24 }];
   biggest.addRows(report.biggestExpenses.map(row => ({ ...row, date: new Date(row.date), amount: excelMoney(row.amount) })) as never[]); biggest.getColumn(1).numFmt = "yyyy-mm-dd"; styleSheet(biggest, [4]);
   if (!report.biggestExpenses.length) biggest.addRow({ description: "No expenses in this period" });
 
   const transactions = workbook.addWorksheet("Transactions");
-  transactions.columns = [{ header: "Date", key: "date", width: 14 }, { header: "Type", key: "type", width: 13 }, { header: "Description", key: "description", width: 36 }, { header: "Category", key: "category", width: 22 }, { header: "Account", key: "account", width: 30 }, { header: "Amount", key: "amount", width: 24 }];
+  transactions.columns = [{ header: "Date", key: "date", width: 14 }, { header: "Type", key: "type", width: 13 }, { header: "Description", key: "description", width: 36 }, { header: "Category", key: "category", width: 22 }, { header: "Wallet", key: "account", width: 30 }, { header: "Amount", key: "amount", width: 24 }];
   transactions.addRows(report.transactions.map(row => ({ ...row, date: new Date(row.date), amount: excelMoney(row.amount) })) as never[]); transactions.getColumn(1).numFmt = "yyyy-mm-dd"; styleSheet(transactions, [6]);
   if (!report.transactions.length) transactions.addRow({ description: "No transactions in this period" });
   return workbook;
