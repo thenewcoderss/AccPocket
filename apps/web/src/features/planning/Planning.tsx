@@ -20,15 +20,21 @@ export function Planning() {
   const [budgetNotice, setBudgetNotice] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const month = localBudgetMonth();
-  const budgets = useQuery({ queryKey: ["budgets", month], queryFn: () => api.get<Budget[]>(`/budgets?month=${month}`) });
-  const goals = useQuery({ queryKey: ["goals"], queryFn: () => api.get<Goal[]>("/goals") });
-  const categories = useQuery({ queryKey: ["categories"], queryFn: () => api.get<Category[]>("/categories") });
-  const accounts = useQuery({ queryKey: ["accounts"], queryFn: () => api.get<AccountDto[]>("/accounts") });
+  const budgets = useQuery({ queryKey: ["budgets", month], queryFn: ({ signal }) => api.get<Budget[]>(`/budgets?month=${month}`, { signal }) });
+  const goals = useQuery({ queryKey: ["goals"], queryFn: ({ signal }) => api.get<Goal[]>("/goals", { signal }) });
+  const categories = useQuery({ queryKey: ["categories"], queryFn: ({ signal }) => api.get<Category[]>("/categories", { signal }) });
+  const accounts = useQuery({ queryKey: ["accounts"], queryFn: ({ signal }) => api.get<AccountDto[]>("/accounts", { signal }) });
   const availableAccounts = activeAccounts(accounts.data);
   const availableBudgetCategories = categories.data?.filter(category => category.type === "EXPENSE" && !budgets.data?.some(budget => budget.categoryId === category.id)) ?? [];
   const save = useMutation({
     mutationFn: ({ path, body }: { path: string; body: unknown }) => api.post(path, body),
-    onSuccess: () => { void queryClient.invalidateQueries(); setDialog(null); }
+    onSuccess: (_data, variables) => {
+      if (variables.path === "/budgets") void queryClient.invalidateQueries({ queryKey: ["budgets"] });
+      else { void queryClient.invalidateQueries({ queryKey: ["goals"] }); void queryClient.invalidateQueries({ queryKey: ["accounts"] }); void queryClient.invalidateQueries({ queryKey: ["transactions"] }); }
+      void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      void queryClient.invalidateQueries({ queryKey: ["report"] });
+      setDialog(null);
+    }
   });
 
   function openBudget() {

@@ -11,7 +11,7 @@ import { dashboardProgress } from "./progress";
 
 export function Dashboard() {
   const { user } = useAuth();
-  const q = useQuery({ queryKey: ["dashboard"], queryFn: () => api.get<DashboardDto>("/dashboard?period=month") });
+  const q = useQuery({ queryKey: ["dashboard"], queryFn: ({ signal }) => api.get<DashboardDto>("/dashboard?period=month", { signal }) });
   if (q.isLoading) return <Spinner/>;
   if (q.error) return <Page title="Home"><ErrorBox error={q.error}/><button className="btn-secondary mt-3" onClick={() => void q.refetch()}>Try again</button></Page>;
   const d = q.data!;

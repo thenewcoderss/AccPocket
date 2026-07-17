@@ -17,11 +17,11 @@ export function Accounts() {
   const [open, setOpen] = useState(false);
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const accounts = useQuery({ queryKey: ["accounts"], queryFn: () => api.get<AccountDto[]>("/accounts") });
+  const accounts = useQuery({ queryKey: ["accounts"], queryFn: ({ signal }) => api.get<AccountDto[]>("/accounts", { signal }) });
   const availableAccounts = activeAccounts(accounts.data);
   const add = useMutation({
     mutationFn: (body: { name: string; type: AccountType; openingBalance: string }) => api.post<AccountDto>("/accounts", body),
-    onSuccess: () => { void queryClient.invalidateQueries(); setOpen(false); }
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ["accounts"] }); void queryClient.invalidateQueries({ queryKey: ["dashboard"] }); void queryClient.invalidateQueries({ queryKey: ["report"] }); setOpen(false); }
   });
 
   function openForm() { add.reset(); setOpen(true); }

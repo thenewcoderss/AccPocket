@@ -14,7 +14,7 @@ export function Reports() {
   const [exporting, setExporting] = useState<"pdf" | "excel" | null>(null);
   const [exportError, setExportError] = useState<unknown>();
   const [exported, setExported] = useState(false);
-  const q = useQuery({ queryKey: ["report", period], queryFn: () => api.get<Report>(`/reports/summary?period=${period}`) });
+  const q = useQuery({ queryKey: ["report", period], queryFn: ({ signal }) => api.get<Report>(`/reports/summary?period=${period}`, { signal }) });
   if (q.isLoading) return <Spinner/>;
   if (q.error) return <Page title="Reports"><ErrorBox error={q.error}/><button className="btn-secondary mt-3" onClick={() => void q.refetch()}>Try again</button></Page>;
 
