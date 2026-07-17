@@ -28,8 +28,8 @@ describe("report exporters", () => {
   it("builds all workbook sheets and preserves high-precision decimals", async () => {
     const buffer = await buildWorkbook(report as never).xlsx.writeBuffer();
     const loaded = new ExcelJS.Workbook(); await loaded.xlsx.load(buffer);
-    expect(loaded.worksheets.map(sheet => sheet.name)).toEqual(["Summary", "Accounts", "Categories", "Biggest Expenses", "Transactions"]);
-    expect(loaded.getWorksheet("Accounts")?.getCell("C2").value).toBe("999999999999999.9999");
+    expect(loaded.worksheets.map(sheet => sheet.name)).toEqual(["Summary", "Wallet", "Categories", "Biggest Expenses", "Transactions"]);
+    expect(loaded.getWorksheet("Wallet")?.getCell("C2").value).toBe("999999999999999.9999");
     expect(loaded.getWorksheet("Transactions")?.getCell("F2").value).toBe(1000.1234);
   });
 
@@ -37,7 +37,7 @@ describe("report exporters", () => {
     const empty = { ...report, accounts: [], categories: [], biggestExpenses: [], transactions: [], trend: [], income: "0", expenses: "0", netCashFlow: "0", totalBalance: "0" };
     expect((await buildPdf(empty as never)).length).toBeGreaterThan(1000);
     const workbook = buildWorkbook(empty as never);
-    expect(workbook.getWorksheet("Accounts")?.getCell("A2").value).toBe("No active accounts");
+    expect(workbook.getWorksheet("Wallet")?.getCell("A2").value).toBe("No active wallets");
     expect(workbook.getWorksheet("Transactions")?.getCell("C2").value).toBe("No transactions in this period");
   });
 

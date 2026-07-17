@@ -1,7 +1,7 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { BarChart3, Calculator, Home, Landmark, MoreHorizontal, Plus, WalletCards } from "lucide-react";
 
-const links = [{ to: "/", label: "Home", icon: Home }, { to: "/accounts", label: "Accounts", icon: WalletCards }, { to: "/transactions", label: "Activity", icon: Landmark }, { to: "/reports", label: "Reports", icon: BarChart3 }, { to: "/more", label: "More", icon: MoreHorizontal }];
+const links = [{ to: "/", label: "Home", icon: Home }, { to: "/accounts", label: "Wallet", icon: WalletCards }, { to: "/transactions", label: "Activity", icon: Landmark }, { to: "/reports", label: "Reports", icon: BarChart3 }, { to: "/more", label: "More", icon: MoreHorizontal }];
 
 export function Shell() {
   return <div className="min-h-screen">

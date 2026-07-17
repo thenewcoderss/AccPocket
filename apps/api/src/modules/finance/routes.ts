@@ -19,14 +19,14 @@ const serializeAccount = (a: { id: string; name: string; type: string; openingBa
 
 async function ownedAccount(userId: string, accountId: string, tx: Prisma.TransactionClient = prisma) {
   const account = await tx.account.findFirst({ where: { id: accountId, userId } });
-  if (!account) throw new AppError(404, "ACCOUNT_NOT_FOUND", "Account was not found");
-  if (account.archived) throw new AppError(409, "ACCOUNT_ARCHIVED", "Archived accounts cannot be changed");
+  if (!account) throw new AppError(404, "ACCOUNT_NOT_FOUND", "Wallet was not found");
+  if (account.archived) throw new AppError(409, "ACCOUNT_ARCHIVED", "Archived wallets cannot be changed");
   return account;
 }
 
 async function lockOwnedAccount(userId: string, accountId: string, tx: Prisma.TransactionClient) {
   const rows = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`SELECT "id" FROM "Account" WHERE "id" = ${accountId} AND "userId" = ${userId} FOR UPDATE`);
-  if (!rows.length) throw new AppError(404, "ACCOUNT_NOT_FOUND", "Account was not found");
+  if (!rows.length) throw new AppError(404, "ACCOUNT_NOT_FOUND", "Wallet was not found");
   return ownedAccount(userId, accountId, tx);
 }
 
@@ -89,8 +89,8 @@ financeRouter.post("/transactions", asyncRoute(async (req, res) => {
     const signed = signedTransactionAmount(input.type, input.amount);
     const settings = await tx.userSettings.findUnique({ where: { userId: req.userId! } });
     const next = account.currentBalance.add(signed);
-    if (!settings?.allowNegativeBalances && next.isNegative()) throw new AppError(409, "INSUFFICIENT_BALANCE", "This expense would make the account balance negative");
-    if (!fitsMoneyColumn(next)) throw new AppError(422, "BALANCE_LIMIT", "This transaction would exceed the supported account balance range");
+    if (!settings?.allowNegativeBalances && next.isNegative()) throw new AppError(409, "INSUFFICIENT_BALANCE", "This expense would make the wallet balance negative");
+    if (!fitsMoneyColumn(next)) throw new AppError(422, "BALANCE_LIMIT", "This transaction would exceed the supported wallet balance range");
     const transaction = await tx.transaction.create({ data: { userId: req.userId!, categoryId: input.categoryId, type: input.type, date: input.date, description: input.description, notes: input.notes, entries: { create: { accountId: account.id, amount: signed, resultingBalance: next } } } });
     await tx.account.update({ where: { id: account.id }, data: { currentBalance: next } });
     return transaction;
@@ -106,7 +106,7 @@ financeRouter.delete("/transactions/:id", asyncRoute(async (req, res) => {
     if (!row) throw new AppError(404, "TRANSACTION_NOT_FOUND", "Transaction was not found");
     const accountIds = [...new Set(row.entries.map(entry => entry.accountId))].sort();
     const ownedAccounts = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`SELECT "id" FROM "Account" WHERE "id" IN (${Prisma.join(accountIds)}) AND "userId" = ${req.userId!} ORDER BY "id" FOR UPDATE`);
-    if (ownedAccounts.length !== accountIds.length) throw new AppError(404, "ACCOUNT_NOT_FOUND", "Account was not found");
+    if (ownedAccounts.length !== accountIds.length) throw new AppError(404, "ACCOUNT_NOT_FOUND", "Wallet was not found");
     for (const entry of row.entries) await tx.account.update({ where: { id: entry.accountId }, data: { currentBalance: { decrement: entry.amount } } });
     await tx.transaction.update({ where: { id: row.id }, data: { deletedAt: new Date() } });
   });
@@ -116,24 +116,24 @@ financeRouter.delete("/transactions/:id", asyncRoute(async (req, res) => {
 const transferSchema = transferInput.extend({ goalId: id.optional() });
 async function createTransfer(userId: string, input: z.infer<typeof transferSchema>) {
   return prisma.$transaction(async tx => {
-    if (input.sourceAccountId === input.destinationAccountId) throw new AppError(422, "SAME_ACCOUNT", "Choose two different accounts");
+    if (input.sourceAccountId === input.destinationAccountId) throw new AppError(422, "SAME_ACCOUNT", "Choose two different wallets");
     const accountIds = [input.sourceAccountId, input.destinationAccountId].sort();
     const locked = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`SELECT "id" FROM "Account" WHERE "id" IN (${Prisma.join(accountIds)}) AND "userId" = ${userId} ORDER BY "id" FOR UPDATE`);
-    if (locked.length !== 2) throw new AppError(404, "ACCOUNT_NOT_FOUND", "Account was not found");
+    if (locked.length !== 2) throw new AppError(404, "ACCOUNT_NOT_FOUND", "Wallet was not found");
     const accounts = await tx.account.findMany({ where: { id: { in: accountIds }, userId } });
     const source = accounts.find(account => account.id === input.sourceAccountId);
     const destination = accounts.find(account => account.id === input.destinationAccountId);
-    if (!source || !destination) throw new AppError(404, "ACCOUNT_NOT_FOUND", "Account was not found");
-    if (source.archived || destination.archived) throw new AppError(409, "ACCOUNT_ARCHIVED", "Archived accounts cannot be changed");
-    if (source.currency !== destination.currency) throw new AppError(422, "CURRENCY_MISMATCH", "Accounts must use the same currency");
+    if (!source || !destination) throw new AppError(404, "ACCOUNT_NOT_FOUND", "Wallet was not found");
+    if (source.archived || destination.archived) throw new AppError(409, "ACCOUNT_ARCHIVED", "Archived wallets cannot be changed");
+    if (source.currency !== destination.currency) throw new AppError(422, "CURRENCY_MISMATCH", "Wallets must use the same currency");
     const settings = await tx.userSettings.findUnique({ where: { userId } });
     const sourceNext = source.currentBalance.sub(input.amount);
-    if (!settings?.allowNegativeBalances && sourceNext.isNegative()) throw new AppError(409, "INSUFFICIENT_BALANCE", "Source account has insufficient balance");
+    if (!settings?.allowNegativeBalances && sourceNext.isNegative()) throw new AppError(409, "INSUFFICIENT_BALANCE", "Source wallet has insufficient balance");
     const destinationNext = destination.currentBalance.add(input.amount);
-    if (!fitsMoneyColumn(sourceNext) || !fitsMoneyColumn(destinationNext)) throw new AppError(422, "BALANCE_LIMIT", "This transfer would exceed the supported account balance range");
+    if (!fitsMoneyColumn(sourceNext) || !fitsMoneyColumn(destinationNext)) throw new AppError(422, "BALANCE_LIMIT", "This transfer would exceed the supported wallet balance range");
     if (input.goalId) {
       const goal = await tx.goal.findFirst({ where: { id: input.goalId, userId, destinationAccountId: destination.id, status: "ACTIVE" } });
-      if (!goal) throw new AppError(422, "INVALID_GOAL", "Goal and destination account do not match");
+      if (!goal) throw new AppError(422, "INVALID_GOAL", "Goal and destination wallet do not match");
     }
     const transaction = await tx.transaction.create({ data: { userId, type: "TRANSFER", date: input.date, description: input.description, notes: input.notes, source: input.goalId ? "GOAL_CONTRIBUTION" : "MANUAL", entries: { create: [{ accountId: source.id, amount: input.amount.negated(), resultingBalance: sourceNext }, { accountId: destination.id, amount: input.amount, resultingBalance: destinationNext }] } } });
     await tx.account.update({ where: { id: source.id }, data: { currentBalance: sourceNext } });

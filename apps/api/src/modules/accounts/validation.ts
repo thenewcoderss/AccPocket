@@ -8,7 +8,7 @@ const openingBalance = z.string()
   .transform(value => new Prisma.Decimal(value));
 
 export const accountInput = z.object({
-  name: z.string().trim().min(1, "Account name is required").max(60, "Account name must be 60 characters or fewer"),
+  name: z.string().trim().min(1, "Wallet name is required").max(60, "Wallet name must be 60 characters or fewer"),
   type: z.enum(accountTypes),
   openingBalance: openingBalance.default("0")
 });

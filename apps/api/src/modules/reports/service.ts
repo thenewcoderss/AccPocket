@@ -26,7 +26,7 @@ export async function reportData(userId: string, period: "day" | "week" | "month
     }
     const sourceAccount = row.entries.find(entry => entry.amount.isNegative())?.account.name;
     const destinationAccount = row.entries.find(entry => entry.amount.isPositive())?.account.name;
-    const account = row.type === "TRANSFER" ? `${sourceAccount ?? "Account"} → ${destinationAccount ?? "Account"}` : row.entries[0]?.account.name ?? "—";
+    const account = row.type === "TRANSFER" ? `${sourceAccount ?? "Wallet"} → ${destinationAccount ?? "Wallet"}` : row.entries[0]?.account.name ?? "—";
     return { id: row.id, date: row.date.toISOString(), type: row.type, description: row.description, category: row.category?.name ?? "—", account, amount: amount.toString() };
   });
   const accounts = await prisma.account.findMany({ where: { userId, archived: false }, select: { name: true, currentBalance: true, currency: true }, orderBy: { name: "asc" } });
