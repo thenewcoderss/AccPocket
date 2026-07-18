@@ -10,6 +10,7 @@ import { fitsMoneyColumn, signedTransactionAmount, transactionInput } from "../t
 import { transferInput } from "../transfers/validation.js";
 import { budgetInput, budgetMonth, budgetMonthDate, budgetProgress } from "../budgets/validation.js";
 import { goalInput, goalProgress, goalUpdateInput } from "../goals/validation.js";
+import { transactionTitleCreateInput, transactionTitleUpdateInput } from "../transaction-titles/validation.js";
 
 export const financeRouter = Router();
 financeRouter.use(authenticate, requireUnlock);
@@ -50,8 +51,9 @@ financeRouter.patch("/accounts/:id", asyncRoute(async (req, res) => {
 financeRouter.delete("/accounts/:id", asyncRoute(async (req, res) => {
   const accountId = String(req.params.id);
   await ownedAccount(req.userId!, accountId);
-  const account = await prisma.account.update({ where: { id: accountId }, data: { archived: true } });
-  res.json({ success: true, data: serializeAccount(account) });
+  if (await prisma.ledgerEntry.count({ where: { accountId } })) throw new AppError(409, "ACCOUNT_HAS_HISTORY", "This wallet cannot be deleted because it has transaction history");
+  await prisma.account.delete({ where: { id: accountId } });
+  res.json({ success: true, data: null });
 }));
 
 financeRouter.get("/categories", asyncRoute(async (req, res) => {
@@ -69,29 +71,80 @@ financeRouter.patch("/categories/:id", asyncRoute(async (req, res) => {
   res.json({ success: true, data: await prisma.category.update({ where: { id: existing.id }, data: input }) });
 }));
 
+async function titleCategory(userId: string, categoryId: string, type?: "INCOME" | "EXPENSE") {
+  const category = await prisma.category.findFirst({ where: { id: categoryId, userId, type } });
+  if (!category) throw new AppError(422, "INVALID_TITLE_CATEGORY", "Choose a valid category with the same transaction type");
+  return category;
+}
+async function rejectDuplicateTitle(userId: string, categoryId: string, name: string, exceptId?: string) {
+  const duplicate = await prisma.transactionTitle.findFirst({ where: { userId, categoryId, id: exceptId ? { not: exceptId } : undefined, name: { equals: name, mode: "insensitive" } } });
+  if (duplicate) throw new AppError(409, "TRANSACTION_TITLE_EXISTS", "A transaction title with this name already exists in the category");
+}
+financeRouter.get("/transaction-titles", asyncRoute(async (req, res) => {
+  const query = z.object({ categoryId: z.string().optional(), type: z.enum(["INCOME", "EXPENSE"]).optional(), includeArchived: z.coerce.boolean().default(false) }).parse(req.query);
+  const rows = await prisma.transactionTitle.findMany({ where: { userId: req.userId!, categoryId: query.categoryId, type: query.type, isActive: query.includeArchived ? undefined : true }, include: { category: true, _count: { select: { transactions: true } } }, orderBy: [{ type: "asc" }, { category: { name: "asc" } }, { name: "asc" }] });
+  res.json({ success: true, data: rows });
+}));
+financeRouter.post("/transaction-titles", asyncRoute(async (req, res) => {
+  const input = transactionTitleCreateInput.parse(req.body);
+  await titleCategory(req.userId!, input.categoryId, input.type);
+  await rejectDuplicateTitle(req.userId!, input.categoryId, input.name);
+  res.status(201).json({ success: true, data: await prisma.transactionTitle.create({ data: { ...input, userId: req.userId! }, include: { category: true, _count: { select: { transactions: true } } } }) });
+}));
+financeRouter.patch("/transaction-titles/:id", asyncRoute(async (req, res) => {
+  const existing = await prisma.transactionTitle.findFirst({ where: { id: String(req.params.id), userId: req.userId! }, include: { _count: { select: { transactions: true } } } });
+  if (!existing) throw new AppError(404, "TRANSACTION_TITLE_NOT_FOUND", "Transaction title was not found");
+  const input = transactionTitleUpdateInput.parse(req.body);
+  const category = input.categoryId ? await titleCategory(req.userId!, input.categoryId) : null;
+  if (category && category.type !== existing.type) {
+    if (existing._count.transactions) throw new AppError(409, "TRANSACTION_TITLE_IN_USE", "This transaction title cannot be moved because it is used by existing transactions.");
+    throw new AppError(422, "INVALID_TITLE_CATEGORY", "Transaction titles cannot be moved between Income and Expense");
+  }
+  await rejectDuplicateTitle(req.userId!, input.categoryId ?? existing.categoryId, input.name ?? existing.name, existing.id);
+  res.json({ success: true, data: await prisma.transactionTitle.update({ where: { id: existing.id }, data: input, include: { category: true, _count: { select: { transactions: true } } } }) });
+}));
+financeRouter.delete("/transaction-titles/:id", asyncRoute(async (req, res) => {
+  const existing = await prisma.transactionTitle.findFirst({ where: { id: String(req.params.id), userId: req.userId! }, include: { _count: { select: { transactions: true } } } });
+  if (!existing) throw new AppError(404, "TRANSACTION_TITLE_NOT_FOUND", "Transaction title was not found");
+  if (existing._count.transactions) {
+    const row = await prisma.transactionTitle.update({ where: { id: existing.id }, data: { isActive: false } });
+    return res.json({ success: true, data: { ...row, message: "This transaction title is used by existing transactions and was archived instead." } });
+  }
+  await prisma.transactionTitle.delete({ where: { id: existing.id } });
+  res.json({ success: true, data: { deleted: true } });
+}));
+
 async function assertCategory(userId: string, categoryId: string | undefined, type: "INCOME" | "EXPENSE", tx: Prisma.TransactionClient = prisma) {
   if (!categoryId) return null;
   const category = await tx.category.findFirst({ where: { id: categoryId, userId, type } });
   if (!category) throw new AppError(422, "INVALID_CATEGORY", `Choose a valid ${type.toLowerCase()} category`);
   return category;
 }
+async function assertTransactionTitle(userId: string, transactionTitleId: string | undefined, categoryId: string | undefined, type: "INCOME" | "EXPENSE", tx: Prisma.TransactionClient = prisma) {
+  if (!transactionTitleId) return null;
+  if (!categoryId) throw new AppError(422, "TITLE_REQUIRES_CATEGORY", "Choose a category before choosing a transaction title");
+  const title = await tx.transactionTitle.findFirst({ where: { id: transactionTitleId, userId, categoryId, type, isActive: true } });
+  if (!title) throw new AppError(422, "INVALID_TRANSACTION_TITLE", "Choose an active transaction title from the selected category");
+  return title;
+}
 financeRouter.get("/transactions", asyncRoute(async (req, res) => {
   const query = z.object({ type: z.enum(["INCOME", "EXPENSE", "TRANSFER"]).optional(), accountId: z.string().optional(), page: z.coerce.number().int().positive().default(1), limit: z.coerce.number().int().min(1).max(100).default(30) }).parse(req.query);
   const where: Prisma.TransactionWhereInput = { userId: req.userId!, deletedAt: null, type: query.type, entries: query.accountId ? { some: { accountId: query.accountId } } : undefined };
-  const [rows, total] = await prisma.$transaction([prisma.transaction.findMany({ where, select: { id: true, type: true, date: true, description: true, category: true, entries: { select: { amount: true, account: { select: { name: true } } } } }, orderBy: [{ date: "desc" }, { createdAt: "desc" }], skip: (query.page - 1) * query.limit, take: query.limit }), prisma.transaction.count({ where })]);
-  res.json({ success: true, data: { items: rows.map(row => ({ id: row.id, type: row.type, amount: row.entries.find(e => e.amount.isPositive())?.amount.abs().toString() ?? row.entries[0]?.amount.abs().toString(), date: row.date.toISOString(), description: row.description, category: row.category, accountName: row.entries.find(e => e.amount.isNegative())?.account.name ?? row.entries[0]?.account.name, destinationAccountName: row.type === "TRANSFER" ? row.entries.find(e => e.amount.isPositive())?.account.name : undefined })), page: query.page, total } });
+  const [rows, total] = await prisma.$transaction([prisma.transaction.findMany({ where, select: { id: true, type: true, date: true, description: true, category: true, transactionTitle: true, entries: { select: { amount: true, account: { select: { name: true } } } } }, orderBy: [{ date: "desc" }, { createdAt: "desc" }], skip: (query.page - 1) * query.limit, take: query.limit }), prisma.transaction.count({ where })]);
+  res.json({ success: true, data: { items: rows.map(row => ({ id: row.id, type: row.type, amount: row.entries.find(e => e.amount.isPositive())?.amount.abs().toString() ?? row.entries[0]?.amount.abs().toString(), date: row.date.toISOString(), description: row.description, category: row.category, transactionTitle: row.transactionTitle, accountName: row.entries.find(e => e.amount.isNegative())?.account.name ?? row.entries[0]?.account.name, destinationAccountName: row.type === "TRANSFER" ? row.entries.find(e => e.amount.isPositive())?.account.name : undefined })), page: query.page, total } });
 }));
 financeRouter.post("/transactions", asyncRoute(async (req, res) => {
   const input = transactionInput.parse(req.body);
   const created = await prisma.$transaction(async tx => {
     const account = await lockOwnedAccount(req.userId!, input.accountId, tx);
     await assertCategory(req.userId!, input.categoryId, input.type, tx);
+    await assertTransactionTitle(req.userId!, input.transactionTitleId, input.categoryId, input.type, tx);
     const signed = signedTransactionAmount(input.type, input.amount);
     const settings = await tx.userSettings.findUnique({ where: { userId: req.userId! } });
     const next = account.currentBalance.add(signed);
     if (!settings?.allowNegativeBalances && next.isNegative()) throw new AppError(409, "INSUFFICIENT_BALANCE", "This expense would make the wallet balance negative");
     if (!fitsMoneyColumn(next)) throw new AppError(422, "BALANCE_LIMIT", "This transaction would exceed the supported wallet balance range");
-    const transaction = await tx.transaction.create({ data: { userId: req.userId!, categoryId: input.categoryId, type: input.type, date: input.date, description: input.description, notes: input.notes, entries: { create: { accountId: account.id, amount: signed, resultingBalance: next } } } });
+    const transaction = await tx.transaction.create({ data: { userId: req.userId!, categoryId: input.categoryId, transactionTitleId: input.transactionTitleId, type: input.type, date: input.date, description: input.description, notes: input.notes, entries: { create: { accountId: account.id, amount: signed, resultingBalance: next } } } });
     await tx.account.update({ where: { id: account.id }, data: { currentBalance: next } });
     return transaction;
   });

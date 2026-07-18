@@ -64,6 +64,7 @@ model User {
   passcode PasscodeCredential?
   accounts Account[]
   categories Category[]
+  transactionTitles TransactionTitle[]
   transactions Transaction[]
   budgets Budget[]
   goals Goal[]
@@ -124,14 +125,32 @@ model Category {
   createdAt DateTime @default(now())
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   transactions Transaction[]
+  transactionTitles TransactionTitle[]
   budgets Budget[]
   @@unique([userId, type, name])
+}
+
+model TransactionTitle {
+  id String @id @default(cuid())
+  userId String
+  categoryId String
+  name String
+  type CategoryType
+  isActive Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  transactions Transaction[]
+  @@index([userId, categoryId, isActive])
+  @@index([userId, type, isActive])
 }
 
 model Transaction {
   id String @id @default(cuid())
   userId String
   categoryId String?
+  transactionTitleId String?
   type TransactionType
   date DateTime
   description String
@@ -142,11 +161,13 @@ model Transaction {
   updatedAt DateTime @updatedAt
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  transactionTitle TransactionTitle? @relation(fields: [transactionTitleId], references: [id], onDelete: SetNull)
   entries LedgerEntry[]
   goalContribution GoalContribution?
   @@index([userId, date])
   @@index([userId, deletedAt, date])
   @@index([userId, type, deletedAt])
+  @@index([transactionTitleId])
 }
 
 model LedgerEntry {
