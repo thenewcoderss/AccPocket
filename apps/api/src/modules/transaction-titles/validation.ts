@@ -11,3 +11,7 @@ export const transactionTitleUpdateInput = z.object({
   categoryId: z.string().min(1).optional(),
   isActive: z.boolean().optional()
 }).refine(value => Object.keys(value).length > 0, "Provide at least one change");
+
+export function transactionTitleRemovalAction(linkedTransactionCount: number) {
+  return linkedTransactionCount > 0 ? "ARCHIVE" as const : "DELETE" as const;
+}
