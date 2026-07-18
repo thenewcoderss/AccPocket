@@ -25,6 +25,7 @@ export interface AccountDto {
 export interface TransactionDto {
   id: string; type: TransactionType; amount: Money; date: string; description: string;
   category?: { id: string; name: string; color: string } | null;
+  transactionTitle?: { id: string; name: string; isActive: boolean } | null;
   accountName?: string; destinationAccountName?: string;
 }
 
