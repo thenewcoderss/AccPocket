@@ -10,7 +10,7 @@ import { fitsMoneyColumn, signedTransactionAmount, transactionInput } from "../t
 import { transferInput } from "../transfers/validation.js";
 import { budgetInput, budgetMonth, budgetMonthDate, budgetProgress } from "../budgets/validation.js";
 import { goalInput, goalProgress, goalUpdateInput } from "../goals/validation.js";
-import { transactionTitleCreateInput, transactionTitleUpdateInput } from "../transaction-titles/validation.js";
+import { transactionTitleCreateInput, transactionTitleRemovalAction, transactionTitleUpdateInput } from "../transaction-titles/validation.js";
 
 export const financeRouter = Router();
 financeRouter.use(authenticate, requireUnlock);
@@ -106,7 +106,7 @@ financeRouter.patch("/transaction-titles/:id", asyncRoute(async (req, res) => {
 financeRouter.delete("/transaction-titles/:id", asyncRoute(async (req, res) => {
   const existing = await prisma.transactionTitle.findFirst({ where: { id: String(req.params.id), userId: req.userId! }, include: { _count: { select: { transactions: true } } } });
   if (!existing) throw new AppError(404, "TRANSACTION_TITLE_NOT_FOUND", "Transaction title was not found");
-  if (existing._count.transactions) {
+  if (transactionTitleRemovalAction(existing._count.transactions) === "ARCHIVE") {
     const row = await prisma.transactionTitle.update({ where: { id: existing.id }, data: { isActive: false } });
     return res.json({ success: true, data: { ...row, message: "This transaction title is used by existing transactions and was archived instead." } });
   }

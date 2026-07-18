@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { transactionTitleCreateInput, transactionTitleUpdateInput } from "../src/modules/transaction-titles/validation.js";
+import { transactionTitleCreateInput, transactionTitleRemovalAction, transactionTitleUpdateInput } from "../src/modules/transaction-titles/validation.js";
 
 describe("transaction title validation", () => {
   it("creates trimmed income and expense titles assigned to categories", () => {
@@ -15,4 +15,6 @@ describe("transaction title validation", () => {
     expect(transactionTitleUpdateInput.parse({ isActive: true })).toEqual({ isActive: true });
     expect(() => transactionTitleUpdateInput.parse({})).toThrow();
   });
+  it("permanently deletes unused titles", () => expect(transactionTitleRemovalAction(0)).toBe("DELETE"));
+  it("archives used titles instead of deleting historical links", () => expect(transactionTitleRemovalAction(1)).toBe("ARCHIVE"));
 });
