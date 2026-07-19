@@ -4,19 +4,44 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/server.ts", "build": "tsc", "typecheck": "tsc --noEmit",
-    "start": "node dist/server.js", "test": "vitest run", "prisma": "prisma"
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "start": "node dist/server.js",
+    "test": "vitest run",
+    "prisma": "prisma"
   },
   "dependencies": {
-    "@accpocket/shared": "workspace:*", "@prisma/client": "^6.8.2", "bcryptjs": "^3.0.2",
-    "cookie-parser": "^1.4.7", "cors": "^2.8.5", "dotenv": "^16.5.0", "exceljs": "^4.4.0",
-    "express": "^5.1.0", "express-rate-limit": "^7.5.0", "helmet": "^8.1.0", "jsonwebtoken": "^9.0.2",
-    "luxon": "^3.6.1", "pdfkit": "^0.16.0", "zod": "^3.25.28"
+    "@accpocket/shared": "workspace:*",
+    "@prisma/client": "^6.8.2",
+    "bcryptjs": "^3.0.2",
+    "compression": "^1.8.1",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
+    "exceljs": "^4.4.0",
+    "express": "^5.1.0",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "luxon": "^3.6.1",
+    "pdfkit": "^0.16.0",
+    "zod": "^3.25.28"
   },
   "devDependencies": {
-    "@types/bcryptjs": "^2.4.6", "@types/cookie-parser": "^1.4.8", "@types/cors": "^2.8.18",
-    "@types/express": "^5.0.2", "@types/jsonwebtoken": "^9.0.9", "@types/luxon": "^3.6.2",
-    "@types/node": "^22.15.21", "@types/pdfkit": "^0.13.8", "prisma": "^6.8.2",
-    "supertest": "^7.1.1", "tsx": "^4.19.4", "typescript": "^5.8.3", "vitest": "^3.1.4"
+    "@types/bcryptjs": "^2.4.6",
+    "@types/compression": "^1.8.1",
+    "@types/cookie-parser": "^1.4.8",
+    "@types/cors": "^2.8.18",
+    "@types/express": "^5.0.2",
+    "@types/jsonwebtoken": "^9.0.9",
+    "@types/luxon": "^3.6.2",
+    "@types/node": "^22.15.21",
+    "@types/pdfkit": "^0.13.8",
+    "prisma": "^6.8.2",
+    "supertest": "^7.1.1",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.4"
   }
 }

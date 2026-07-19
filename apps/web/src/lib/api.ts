@@ -41,4 +41,12 @@ async function raw<T>(path: string, init: RequestInit = {}, retry = true): Promi
   if (!payload.success) { const error = new Error(payload.error.message) as Error & { code: string; status: number }; error.code = payload.error.code; error.status = response.status; throw error; }
   return payload.data;
 }
-export const api = { get: <T>(path: string, init?: Pick<RequestInit, "signal">) => raw<T>(path, init), post: <T>(path: string, body?: unknown) => raw<T>(path, { method: "POST", body: body === undefined ? undefined : JSON.stringify(body) }), patch: <T>(path: string, body: unknown) => raw<T>(path, { method: "PATCH", body: JSON.stringify(body) }), delete: <T>(path: string) => raw<T>(path, { method: "DELETE" }), download: async (path: string) => { const headers = new Headers(); if (accessToken) headers.set("authorization", `Bearer ${accessToken}`); if (unlockToken) headers.set("x-unlock-token", unlockToken); const response = await fetch(`${base}${path}`, { headers, credentials: "include" }); if (!response.ok) throw new Error("Download failed"); const blob = await response.blob(); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = response.headers.get("content-disposition")?.match(/filename="(.+)"/)?.[1] ?? "report"; a.click(); URL.revokeObjectURL(url); } };
+export async function downloadError(response: Response) {
+  try {
+    const payload = await response.json() as ApiResponse<unknown>;
+    if (!payload.success) return new Error(payload.error.message);
+  } catch { /* A proxy may return a non-JSON error page. */ }
+  return new Error(`Download failed (${response.status})`);
+}
+
+export const api = { get: <T>(path: string, init?: Pick<RequestInit, "signal">) => raw<T>(path, init), post: <T>(path: string, body?: unknown) => raw<T>(path, { method: "POST", body: body === undefined ? undefined : JSON.stringify(body) }), patch: <T>(path: string, body: unknown) => raw<T>(path, { method: "PATCH", body: JSON.stringify(body) }), delete: <T>(path: string) => raw<T>(path, { method: "DELETE" }), download: async (path: string) => { const headers = new Headers(); if (accessToken) headers.set("authorization", `Bearer ${accessToken}`); if (unlockToken) headers.set("x-unlock-token", unlockToken); const response = await fetch(`${base}${path}`, { headers, credentials: "include" }); if (!response.ok) throw await downloadError(response); const blob = await response.blob(); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = response.headers.get("content-disposition")?.match(/filename="(.+)"/)?.[1] ?? "report"; a.click(); URL.revokeObjectURL(url); } };

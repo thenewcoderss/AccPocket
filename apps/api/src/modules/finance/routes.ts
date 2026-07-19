@@ -10,6 +10,7 @@ import { fitsMoneyColumn, signedTransactionAmount, transactionInput } from "../t
 import { transferInput } from "../transfers/validation.js";
 import { budgetInput, budgetMonth, budgetMonthDate, budgetProgress } from "../budgets/validation.js";
 import { goalInput, goalProgress, goalUpdateInput } from "../goals/validation.js";
+import { performanceTelemetry } from "../../middleware/performance.js";
 
 export const financeRouter = Router();
 financeRouter.use(authenticate, requireUnlock);
@@ -106,7 +107,7 @@ async function assertTransactionTitle(userId: string, titleId: string, tx: Prism
   if (!title) throw new AppError(422, "INVALID_TRANSACTION_TITLE", "Choose a valid Transaction Title");
   return title;
 }
-financeRouter.get("/transactions", asyncRoute(async (req, res) => {
+financeRouter.get("/transactions", performanceTelemetry("transactions.list"), asyncRoute(async (req, res) => {
   const query = z.object({ type: z.enum(["INCOME", "EXPENSE", "TRANSFER"]).optional(), accountId: z.string().optional(), page: z.coerce.number().int().positive().default(1), limit: z.coerce.number().int().min(1).max(100).default(30) }).parse(req.query);
   const where: Prisma.TransactionWhereInput = { userId: req.userId!, deletedAt: null, type: query.type, entries: query.accountId ? { some: { accountId: query.accountId } } : undefined };
   const [rows, total] = await prisma.$transaction([prisma.transaction.findMany({ where, select: { id: true, type: true, date: true, description: true, title: { select: { name: true } }, category: true, entries: { select: { amount: true, account: { select: { name: true } } } } }, orderBy: [{ date: "desc" }, { createdAt: "desc" }], skip: (query.page - 1) * query.limit, take: query.limit }), prisma.transaction.count({ where })]);

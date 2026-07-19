@@ -5,15 +5,16 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import { api } from "../../lib/api";
 import { Empty, ErrorBox, Money, Page, Spinner } from "../../components/ui";
 import { formatTransactionDate } from "../transactions/date";
+import { reportLimitMessage, type ReportDetailLimit } from "./model";
 
 type ReportTransaction = { id: string; date: string; title: string; description: string; type: "INCOME" | "EXPENSE" | "TRANSFER"; amount: string; account: string; category: string };
-type Report = { currency: string; income: string; expenses: string; netCashFlow: string; totalBalance: string; from: string; to: string; accounts: Array<{ name: string; balance: string; currency: string }>; categories: Array<{ name: string; amount: string; color: string }>; transactions: ReportTransaction[]; trend: Array<{ label: string; income: string; expense: string }>; biggestExpenses: Array<{ id: string; date: string; title: string; description: string; account: string; amount: string }> };
+type Report = { currency: string; income: string; expenses: string; netCashFlow: string; totalBalance: string; from: string; to: string; accounts: Array<{ name: string; balance: string; currency: string }>; categories: Array<{ name: string; amount: string; color: string }>; transactions: ReportTransaction[]; detail: ReportDetailLimit; trend: Array<{ label: string; income: string; expense: string }>; biggestExpenses: Array<{ id: string; date: string; title: string; description: string; account: string; amount: string }> };
 type SortKey = "date" | "title" | "amount";
 
 export function Reports() {
   const [period, setPeriod] = useState("month"), [search, setSearch] = useState(""), [type, setType] = useState("ALL"), [title, setTitle] = useState("ALL"), [sort, setSort] = useState<SortKey>("date"), [ascending, setAscending] = useState(false);
   const [exporting, setExporting] = useState<"pdf" | "excel" | null>(null), [exportError, setExportError] = useState<unknown>(), [exported, setExported] = useState(false);
-  const q = useQuery({ queryKey: ["report", period], queryFn: ({ signal }) => api.get<Report>(`/reports?period=${period}`, { signal }) });
+  const q = useQuery({ queryKey: ["report", period], queryFn: ({ signal }) => api.get<Report>(`/reports/summary?period=${period}`, { signal }) });
   const titles = useMemo(() => [...new Set(q.data?.transactions.map(row => row.title) ?? [])].sort((a, b) => a.localeCompare(b)), [q.data]);
   const rows = useMemo(() => {
     const needle = search.trim().toLocaleLowerCase();
@@ -27,6 +28,7 @@ export function Reports() {
   async function download(format: "pdf" | "excel") { setExporting(format); setExportError(undefined); setExported(false); try { await api.download(`/reports/export/${format}?period=${period}`); setExported(true); } catch (error) { setExportError(error); } finally { setExporting(null); } }
   const hasActivity = Boolean(q.data?.transactions.length), hasExpenses = Boolean(q.data?.categories.length);
   return <Page title="Reports" description="Understand your cash flow and keep useful records." action={<label><span className="sr-only">Report period</span><select className="input !w-auto" value={period} onChange={event => setPeriod(event.target.value)}><option value="day">Daily</option><option value="week">Weekly</option><option value="month">Monthly</option></select></label>}>
+    {q.data?.detail && reportLimitMessage(q.data.detail) && <p role="status" className="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{reportLimitMessage(q.data.detail)}</p>}
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{[["Total balance", q.data?.totalBalance, "text-slate-900"], ["Income", q.data?.income, "text-green-700"], ["Expenses", q.data?.expenses, "text-red-600"], ["Net cash flow", q.data?.netCashFlow, "text-pocket-700"]].map(([label, value, color]) => <div className="card" key={label}><p className="eyebrow">{label}</p><Money value={value ?? "0"} currency={q.data?.currency} className={`mt-3 block text-xl font-bold ${color}`}/></div>)}</div>
     {hasActivity && q.data?.trend.length ? <section className="card mt-5"><h2 className="section-title">Cash-flow trend</h2><p className="mt-1 text-sm text-slate-500">Income and expenses by day in the selected period</p><div className="mt-5 h-64" aria-hidden="true"><ResponsiveContainer><BarChart data={q.data.trend}><CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3"/><XAxis dataKey="label" tick={{ fontSize: 10, fill: "#64748b" }}/><YAxis tick={{ fontSize: 11, fill: "#475569" }}/><Tooltip/><Bar dataKey="income" fill="#15803d" radius={[5, 5, 0, 0]}/><Bar dataKey="expense" fill="#dc2626" radius={[5, 5, 0, 0]}/></BarChart></ResponsiveContainer></div></section> : null}
     {hasExpenses ? <section className="card mt-5"><h2 className="section-title">Spending by category</h2><div className="mt-5 h-64" aria-hidden="true"><ResponsiveContainer><BarChart data={q.data?.categories} layout="vertical"><CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" horizontal={false}/><XAxis type="number"/><YAxis type="category" dataKey="name" width={76}/><Tooltip/><Bar dataKey="amount" fill="#0d9488" radius={[0, 7, 7, 0]}/></BarChart></ResponsiveContainer></div></section> : null}

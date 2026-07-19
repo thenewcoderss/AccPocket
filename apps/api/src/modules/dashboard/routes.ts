@@ -8,10 +8,11 @@ import { asyncRoute } from "../../utils/errors.js";
 import { reportData } from "../reports/service.js";
 import { budgetMonthDate, budgetProgress } from "../budgets/validation.js";
 import { goalProgress } from "../goals/validation.js";
+import { performanceTelemetry } from "../../middleware/performance.js";
 
 export const dashboardRouter = Router();
 dashboardRouter.use(authenticate, requireUnlock);
-dashboardRouter.get("/", asyncRoute(async (req, res) => {
+dashboardRouter.get("/", performanceTelemetry("dashboard"), asyncRoute(async (req, res) => {
   const period = z.literal("month").default("month").parse(req.query.period);
   const user = await prisma.user.findUniqueOrThrow({ where: { id: req.userId! }, select: { timezone: true } });
   const currentBudgetMonth = budgetMonthDate(DateTime.now().setZone(user.timezone).toFormat("yyyy-MM"));
