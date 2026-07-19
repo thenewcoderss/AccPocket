@@ -14,4 +14,9 @@ jobs:
           DATABASE_URL: postgresql://user:pass@localhost:5432/accpocket
       - run: pnpm typecheck
       - run: pnpm test
+        env:
+          DATABASE_URL: postgresql://accpocket_test:accpocket_test@127.0.0.1:5432/accpocket_ci_unit
+          JWT_ACCESS_SECRET: ci-test-only-access-secret-0000000001
+          JWT_REFRESH_SECRET: ci-test-only-refresh-secret-0000000002
+          JWT_UNLOCK_SECRET: ci-test-only-unlock-secret-0000000003
       - run: pnpm build

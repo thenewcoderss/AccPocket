@@ -40,11 +40,11 @@ export async function buildPdf(report: Report) {
 
   section("Biggest expenses");
   if (!report.biggestExpenses.length) line("No expenses in this period.", "#64748b");
-  for (const expense of report.biggestExpenses) line(`${expense.date.slice(0, 10)} | ${expense.description} | ${expense.account} | ${moneyText(report.currency, expense.amount)}`);
+  for (const expense of report.biggestExpenses) line(`${expense.date.slice(0, 10)} | ${expense.title} | ${expense.description || "—"} | ${expense.account} | ${moneyText(report.currency, expense.amount)}`);
 
   section("Transactions");
   if (!report.transactions.length) line("No transactions in this period.", "#64748b");
-  for (const row of report.transactions) line(`${row.date.slice(0, 10)} | ${row.type} | ${row.description} | ${row.account} | ${moneyText(report.currency, row.amount)}`);
+  for (const row of report.transactions) line(`${row.date.slice(0, 10)} | ${row.type} | ${row.title} | ${row.description || "—"} | ${row.account} | ${moneyText(report.currency, row.amount)}`);
   pageBreak(45); doc.moveDown().fontSize(8).fillColor("#64748b").text("AccPocket records transactions only and does not move real money. Transfers and goal contributions are excluded from income, expenses, and net cash flow.");
   doc.end();
   return complete;
@@ -78,13 +78,13 @@ export function buildWorkbook(report: Report) {
   if (!report.categories.length) categories.addRow({ name: "No expense transactions in this period" });
 
   const biggest = workbook.addWorksheet("Biggest Expenses");
-  biggest.columns = [{ header: "Date", key: "date", width: 14 }, { header: "Description", key: "description", width: 36 }, { header: "Wallet", key: "account", width: 28 }, { header: "Amount", key: "amount", width: 24 }];
-  biggest.addRows(report.biggestExpenses.map(row => ({ ...row, date: new Date(row.date), amount: excelMoney(row.amount) })) as never[]); biggest.getColumn(1).numFmt = "yyyy-mm-dd"; styleSheet(biggest, [4]);
-  if (!report.biggestExpenses.length) biggest.addRow({ description: "No expenses in this period" });
+  biggest.columns = [{ header: "Date", key: "date", width: 14 }, { header: "Transaction Title", key: "title", width: 28 }, { header: "Description", key: "description", width: 36 }, { header: "Wallet", key: "account", width: 28 }, { header: "Amount", key: "amount", width: 24 }];
+  biggest.addRows(report.biggestExpenses.map(row => ({ ...row, date: new Date(row.date), amount: excelMoney(row.amount) })) as never[]); biggest.getColumn(1).numFmt = "yyyy-mm-dd"; styleSheet(biggest, [5]);
+  if (!report.biggestExpenses.length) biggest.addRow({ title: "No expenses in this period" });
 
   const transactions = workbook.addWorksheet("Transactions");
-  transactions.columns = [{ header: "Date", key: "date", width: 14 }, { header: "Type", key: "type", width: 13 }, { header: "Description", key: "description", width: 36 }, { header: "Category", key: "category", width: 22 }, { header: "Wallet", key: "account", width: 30 }, { header: "Amount", key: "amount", width: 24 }];
-  transactions.addRows(report.transactions.map(row => ({ ...row, date: new Date(row.date), amount: excelMoney(row.amount) })) as never[]); transactions.getColumn(1).numFmt = "yyyy-mm-dd"; styleSheet(transactions, [6]);
-  if (!report.transactions.length) transactions.addRow({ description: "No transactions in this period" });
+  transactions.columns = [{ header: "Date", key: "date", width: 14 }, { header: "Type", key: "type", width: 13 }, { header: "Transaction Title", key: "title", width: 28 }, { header: "Description", key: "description", width: 36 }, { header: "Category", key: "category", width: 22 }, { header: "Wallet", key: "account", width: 30 }, { header: "Amount", key: "amount", width: 24 }];
+  transactions.addRows(report.transactions.map(row => ({ ...row, date: new Date(row.date), amount: excelMoney(row.amount) })) as never[]); transactions.getColumn(1).numFmt = "yyyy-mm-dd"; styleSheet(transactions, [7]);
+  if (!report.transactions.length) transactions.addRow({ title: "No transactions in this period" });
   return workbook;
 }

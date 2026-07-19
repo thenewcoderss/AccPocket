@@ -10,6 +10,7 @@ import { fitsMoneyColumn, signedTransactionAmount, transactionInput } from "../t
 import { transferInput } from "../transfers/validation.js";
 import { budgetInput, budgetMonth, budgetMonthDate, budgetProgress } from "../budgets/validation.js";
 import { goalInput, goalProgress, goalUpdateInput } from "../goals/validation.js";
+import { performanceTelemetry } from "../../middleware/performance.js";
 import { transactionTitleCreateInput, transactionTitleRemovalAction, transactionTitleUpdateInput } from "../transaction-titles/validation.js";
 
 export const financeRouter = Router();
@@ -32,8 +33,8 @@ async function lockOwnedAccount(userId: string, accountId: string, tx: Prisma.Tr
 }
 
 financeRouter.get("/accounts", asyncRoute(async (req, res) => {
-  const rows = await prisma.account.findMany({ where: { userId: req.userId! }, select: { id: true, name: true, type: true, openingBalance: true, currentBalance: true, currency: true, archived: true }, orderBy: { createdAt: "asc" } });
-  res.json({ success: true, data: rows.map(serializeAccount) });
+  const rows = await prisma.account.findMany({ where: { userId: req.userId! }, select: { id: true, name: true, type: true, openingBalance: true, currentBalance: true, currency: true, archived: true, _count: { select: { entries: true, goals: true } } }, orderBy: { createdAt: "asc" } });
+  res.json({ success: true, data: rows.map(({ _count, ...account }) => ({ ...serializeAccount(account), canDelete: _count.entries === 0 && _count.goals === 0, deleteBlockedReason: _count.entries ? "This wallet has transaction history and cannot be deleted." : _count.goals ? "This wallet is used by a savings goal and cannot be deleted." : undefined })) });
 }));
 financeRouter.post("/accounts", asyncRoute(async (req, res) => {
   const input = accountInput.parse(req.body);
@@ -51,16 +52,22 @@ financeRouter.patch("/accounts/:id", asyncRoute(async (req, res) => {
 financeRouter.delete("/accounts/:id", asyncRoute(async (req, res) => {
   const accountId = String(req.params.id);
   await ownedAccount(req.userId!, accountId);
-  if (await prisma.ledgerEntry.count({ where: { accountId } })) throw new AppError(409, "ACCOUNT_HAS_HISTORY", "This wallet cannot be deleted because it has transaction history");
+  const [entries, goals] = await Promise.all([prisma.ledgerEntry.count({ where: { accountId } }), prisma.goal.count({ where: { destinationAccountId: accountId } })]);
+  if (entries) throw new AppError(409, "ACCOUNT_IN_USE", "This wallet has transaction history and cannot be deleted");
+  if (goals) throw new AppError(409, "ACCOUNT_IN_USE", "This wallet is used by a savings goal and cannot be deleted");
   await prisma.account.delete({ where: { id: accountId } });
   res.json({ success: true, data: null });
 }));
 
 financeRouter.get("/categories", asyncRoute(async (req, res) => {
-  res.json({ success: true, data: await prisma.category.findMany({ where: { userId: req.userId! }, select: { id: true, name: true, type: true, color: true, icon: true, system: true, createdAt: true }, orderBy: [{ type: "asc" }, { name: "asc" }] }) });
+  res.json({ success: true, data: await prisma.category.findMany({ where: { userId: req.userId! }, select: { id: true, name: true, type: true, color: true, icon: true, system: true, parentId: true, createdAt: true, _count: { select: { children: true } } }, orderBy: [{ type: "asc" }, { name: "asc" }] }) });
 }));
 financeRouter.post("/categories", asyncRoute(async (req, res) => {
-  const input = z.object({ name: z.string().trim().min(1).max(40), type: z.enum(["INCOME", "EXPENSE"]), color: z.string().regex(/^#[0-9a-f]{6}$/i).default("#64748b"), icon: z.string().max(30).default("tag") }).parse(req.body);
+  const input = z.object({ name: z.string().trim().min(1).max(40), type: z.enum(["INCOME", "EXPENSE"]), parentId: z.string().min(1).optional(), color: z.string().regex(/^#[0-9a-f]{6}$/i).default("#64748b"), icon: z.string().max(30).default("tag") }).parse(req.body);
+  if (input.parentId) {
+    const parent = await prisma.category.findFirst({ where: { id: input.parentId, userId: req.userId!, type: input.type } });
+    if (!parent) throw new AppError(422, "INVALID_PARENT_CATEGORY", "Choose a parent category of the same type");
+  }
   const row = await prisma.category.create({ data: { ...input, userId: req.userId! } });
   res.status(201).json({ success: true, data: row });
 }));
@@ -72,8 +79,9 @@ financeRouter.patch("/categories/:id", asyncRoute(async (req, res) => {
 }));
 
 async function titleCategory(userId: string, categoryId: string, type?: "INCOME" | "EXPENSE") {
-  const category = await prisma.category.findFirst({ where: { id: categoryId, userId, type } });
+  const category = await prisma.category.findFirst({ where: { id: categoryId, userId, type }, include: { _count: { select: { children: true } } } });
   if (!category) throw new AppError(422, "INVALID_TITLE_CATEGORY", "Choose a valid category with the same transaction type");
+  if (category._count.children) throw new AppError(422, "PARENT_CATEGORY", "Choose a sub-category; parent categories cannot receive transaction titles");
   return category;
 }
 async function rejectDuplicateTitle(userId: string, categoryId: string, name: string, exceptId?: string) {
@@ -116,8 +124,9 @@ financeRouter.delete("/transaction-titles/:id", asyncRoute(async (req, res) => {
 
 async function assertCategory(userId: string, categoryId: string | undefined, type: "INCOME" | "EXPENSE", tx: Prisma.TransactionClient = prisma) {
   if (!categoryId) return null;
-  const category = await tx.category.findFirst({ where: { id: categoryId, userId, type } });
+  const category = await tx.category.findFirst({ where: { id: categoryId, userId, type }, include: { _count: { select: { children: true } } } });
   if (!category) throw new AppError(422, "INVALID_CATEGORY", `Choose a valid ${type.toLowerCase()} category`);
+  if (category._count.children) throw new AppError(422, "PARENT_CATEGORY", "Choose a sub-category; parent categories cannot receive transactions");
   return category;
 }
 async function assertTransactionTitle(userId: string, transactionTitleId: string | undefined, categoryId: string | undefined, type: "INCOME" | "EXPENSE", tx: Prisma.TransactionClient = prisma) {
@@ -127,7 +136,7 @@ async function assertTransactionTitle(userId: string, transactionTitleId: string
   if (!title) throw new AppError(422, "INVALID_TRANSACTION_TITLE", "Choose an active transaction title from the selected category");
   return title;
 }
-financeRouter.get("/transactions", asyncRoute(async (req, res) => {
+financeRouter.get("/transactions", performanceTelemetry("transactions.list"), asyncRoute(async (req, res) => {
   const query = z.object({ type: z.enum(["INCOME", "EXPENSE", "TRANSFER"]).optional(), accountId: z.string().optional(), page: z.coerce.number().int().positive().default(1), limit: z.coerce.number().int().min(1).max(100).default(30) }).parse(req.query);
   const where: Prisma.TransactionWhereInput = { userId: req.userId!, deletedAt: null, type: query.type, entries: query.accountId ? { some: { accountId: query.accountId } } : undefined };
   const [rows, total] = await prisma.$transaction([prisma.transaction.findMany({ where, select: { id: true, type: true, date: true, description: true, category: true, transactionTitle: true, entries: { select: { amount: true, account: { select: { name: true } } } } }, orderBy: [{ date: "desc" }, { createdAt: "desc" }], skip: (query.page - 1) * query.limit, take: query.limit }), prisma.transaction.count({ where })]);
@@ -161,7 +170,8 @@ financeRouter.delete("/transactions/:id", asyncRoute(async (req, res) => {
     const ownedAccounts = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`SELECT "id" FROM "Account" WHERE "id" IN (${Prisma.join(accountIds)}) AND "userId" = ${req.userId!} ORDER BY "id" FOR UPDATE`);
     if (ownedAccounts.length !== accountIds.length) throw new AppError(404, "ACCOUNT_NOT_FOUND", "Wallet was not found");
     for (const entry of row.entries) await tx.account.update({ where: { id: entry.accountId }, data: { currentBalance: { decrement: entry.amount } } });
-    await tx.transaction.update({ where: { id: row.id }, data: { deletedAt: new Date() } });
+    await tx.goalContribution.deleteMany({ where: { transactionId: row.id } });
+    await tx.transaction.delete({ where: { id: row.id } });
   });
   res.json({ success: true, data: null });
 }));

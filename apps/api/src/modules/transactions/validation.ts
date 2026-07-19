@@ -18,7 +18,7 @@ export const transactionInput = z.object({
   type: z.enum(["INCOME", "EXPENSE"]),
   amount: transactionAmount,
   date: transactionDate,
-  description: z.string().trim().min(1, "Description is required").max(120, "Description must be 120 characters or fewer"),
+  description: z.string().trim().max(120, "Description must be 120 characters or fewer").default(""),
   notes: z.string().trim().max(500, "Notes must be 500 characters or fewer").optional()
 });
 

@@ -8,6 +8,7 @@ import { asyncRoute, AppError } from "../../utils/errors.js";
 import { authenticate } from "../../middleware/security.js";
 import { DEFAULT_CATEGORIES } from "@accpocket/shared";
 import { hashToken, signAccess, signRefresh, verifyRefresh } from "../../services/tokens.js";
+import { performanceTelemetry } from "../../middleware/performance.js";
 
 export const authRouter = Router();
 const credentials = z.object({ email: z.string().email().transform(v => v.trim().toLowerCase()), password: z.string().min(10).max(128) });
@@ -42,7 +43,7 @@ authRouter.post("/login", asyncRoute(async (req, res) => {
   res.cookie("refreshToken", session.refresh, cookie).json({ success: true, data: { accessToken: session.accessToken, user: { id: user.id, name: user.name, email: user.email, defaultCurrency: user.defaultCurrency, timezone: user.timezone, passcodeEnabled: Boolean(user.passcode?.enabled) } } });
 }));
 
-authRouter.post("/refresh", asyncRoute(async (req, res) => {
+authRouter.post("/refresh", performanceTelemetry("auth.refresh"), asyncRoute(async (req, res) => {
   const oldToken = req.cookies.refreshToken;
   if (!oldToken) throw new AppError(401, "REFRESH_REQUIRED", "Please sign in again");
   let payload;

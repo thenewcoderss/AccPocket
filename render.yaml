@@ -18,3 +18,9 @@ services:
         generateValue: true
       - key: WEB_ORIGIN
         sync: false
+      - key: REPORT_DETAIL_ROW_LIMIT
+        value: 5000
+      - key: PDF_EXPORT_ROW_LIMIT
+        value: 10000
+      - key: EXCEL_EXPORT_ROW_LIMIT
+        value: 50000

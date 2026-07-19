@@ -122,8 +122,11 @@ model Category {
   color String @default("#64748b")
   icon String @default("tag")
   system Boolean @default(false)
+  parentId String?
   createdAt DateTime @default(now())
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent Category? @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
+  children Category[] @relation("CategoryHierarchy")
   transactions Transaction[]
   transactionTitles TransactionTitle[]
   budgets Budget[]
