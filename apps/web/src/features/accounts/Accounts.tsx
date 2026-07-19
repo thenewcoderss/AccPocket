@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AccountDto, AccountType } from "@accpocket/shared";
-import { Plus, WalletCards } from "lucide-react";
+import { Plus, Trash2, WalletCards } from "lucide-react";
 import { api } from "../../lib/api";
 import { activeAccounts } from "../../lib/accountRequirements";
 import { useAuth } from "../../store/auth";
@@ -15,6 +15,7 @@ const accountTypes: Array<{ value: AccountType; label: string }> = [
 
 export function Accounts() {
   const [open, setOpen] = useState(false);
+  const [deleting, setDeleting] = useState<AccountDto | null>(null);
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: ({ signal }) => api.get<AccountDto[]>("/accounts", { signal }) });
@@ -23,6 +24,7 @@ export function Accounts() {
     mutationFn: (body: { name: string; type: AccountType; openingBalance: string }) => api.post<AccountDto>("/accounts", body),
     onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ["accounts"] }); void queryClient.invalidateQueries({ queryKey: ["dashboard"] }); void queryClient.invalidateQueries({ queryKey: ["report"] }); setOpen(false); }
   });
+  const remove = useMutation({ mutationFn: (id: string) => api.delete(`/accounts/${id}`), onSuccess: () => { setDeleting(null); void queryClient.invalidateQueries({ queryKey: ["accounts"] }); void queryClient.invalidateQueries({ queryKey: ["dashboard"] }); void queryClient.invalidateQueries({ queryKey: ["report"] }); } });
 
   function openForm() { add.reset(); setOpen(true); }
   function closeForm() { add.reset(); setOpen(false); }
@@ -37,7 +39,7 @@ export function Accounts() {
     {accounts.error && <div><ErrorBox error={accounts.error}/><button className="btn-secondary mt-3" onClick={() => void accounts.refetch()}>Try again</button></div>}
     {!accounts.error && <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {availableAccounts.map(account => <article className="card-interactive min-w-0" key={account.id}>
-        <div className="flex items-center justify-between gap-3"><span className="grid h-11 w-11 place-items-center rounded-2xl bg-pocket-50 text-pocket-700"><WalletCards size={21}/></span><span className="status-pill bg-slate-100 text-slate-600">{account.type.replaceAll("_", " ")}</span></div>
+        <div className="flex items-center justify-between gap-3"><span className="grid h-11 w-11 place-items-center rounded-2xl bg-pocket-50 text-pocket-700"><WalletCards size={21}/></span><div className="flex items-center gap-2"><span className="status-pill bg-slate-100 text-slate-600">{account.type.replaceAll("_", " ")}</span><button className="icon-button text-red-600 disabled:cursor-not-allowed disabled:opacity-35" disabled={!account.canDelete} title={account.canDelete ? "Delete wallet" : account.deleteBlockedReason} aria-label={account.canDelete ? `Delete ${account.name}` : `${account.name} cannot be deleted: ${account.deleteBlockedReason}`} onClick={() => { remove.reset(); setDeleting(account); }}><Trash2 size={18}/></button></div></div>
         <h2 className="mt-6 truncate font-semibold text-slate-700">{account.name}</h2><p className="mt-1 text-xs text-slate-500">Current balance</p><Money value={account.currentBalance} currency={account.currency} className="mt-0.5 block break-words text-2xl font-bold"/>
       </article>)}
     </div>}
@@ -48,5 +50,6 @@ export function Accounts() {
       <label className="block"><span className="label">Opening balance</span><input className="input-amount" name="openingBalance" type="number" inputMode="decimal" min="0" max="999999999999999.9999" step="0.0001" defaultValue="0" required/><span className="mt-1.5 block text-xs text-slate-500">Enter the amount currently in this wallet, with up to 4 decimal places. Wallets use {user?.defaultCurrency ?? "your default currency"}.</span></label>
       {add.error && <ErrorBox error={add.error}/>}<button className="btn-primary w-full" disabled={add.isPending}>{add.isPending ? "Saving…" : "Save wallet"}</button>
     </form></Modal>}
+    {deleting && <Modal title="Delete wallet?" close={() => setDeleting(null)}><p className="text-sm leading-6 text-slate-600">Delete <b>{deleting.name}</b>? This is only allowed because it has no transaction history or savings goals.</p>{remove.error && <div className="mt-4"><ErrorBox error={remove.error}/></div>}<div className="mt-6 flex justify-end gap-2"><button className="btn-secondary" onClick={() => setDeleting(null)}>Cancel</button><button className="btn-primary !bg-red-600 hover:!bg-red-700" disabled={remove.isPending} onClick={() => remove.mutate(deleting.id)}>{remove.isPending ? "Deleting…" : "Delete wallet"}</button></div></Modal>}
   </Page>;
 }

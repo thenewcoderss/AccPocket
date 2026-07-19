@@ -1,12 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { fitsMoneyColumn, signedTransactionAmount, transactionInput } from "../src/modules/transactions/validation.js";
 
-const valid = { accountId: "account-1", type: "INCOME", amount: "10.25", date: "2026-07-06", description: " Salary " };
+const valid = { accountId: "account-1", titleId: "title-1", type: "INCOME", amount: "10.25", date: "2026-07-06", description: " Salary " };
 
 describe("transaction input validation", () => {
   it("accepts income and expense transactions and trims text", () => {
     expect(transactionInput.parse(valid).description).toBe("Salary");
     expect(transactionInput.parse({ ...valid, type: "EXPENSE", notes: "  Optional note  " }).notes).toBe("Optional note");
+  });
+
+  it("accepts an empty or omitted optional description", () => {
+    expect(transactionInput.parse({ ...valid, description: "" }).description).toBe("");
+    const { description: _description, ...withoutDescription } = valid;
+    expect(transactionInput.parse(withoutDescription).description).toBe("");
   });
 
   it("applies the correct ledger sign", () => {

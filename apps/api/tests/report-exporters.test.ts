@@ -7,8 +7,8 @@ const report = {
   income: "1000.1234", expenses: "250.1111", netCashFlow: "750.0123", totalBalance: "999999999999999.9999",
   accounts: [{ name: "Cash", balance: "999999999999999.9999", currency: "BDT" }],
   categories: [{ id: "food", name: "Food", color: "#0f766e", amount: "250.1111" }],
-  biggestExpenses: [{ id: "expense", date: "2026-07-02T00:00:00.000Z", description: "Groceries", account: "Cash", amount: "250.1111" }],
-  transactions: [{ id: "income", date: "2026-07-01T00:00:00.000Z", type: "INCOME" as const, description: "Salary", category: "Salary", account: "Cash", amount: "1000.1234" }],
+  biggestExpenses: [{ id: "expense", date: "2026-07-02T00:00:00.000Z", title: "Groceries", description: "Weekly shop", account: "Cash", amount: "250.1111" }],
+  transactions: [{ id: "income", date: "2026-07-01T00:00:00.000Z", type: "INCOME" as const, title: "Salary", description: "July pay", category: "Salary", account: "Cash", amount: "1000.1234" }],
   trend: [{ label: "2026-07-01", income: "1000.1234", expense: "0" }]
 };
 
@@ -30,7 +30,8 @@ describe("report exporters", () => {
     const loaded = new ExcelJS.Workbook(); await loaded.xlsx.load(buffer);
     expect(loaded.worksheets.map(sheet => sheet.name)).toEqual(["Summary", "Wallet", "Categories", "Biggest Expenses", "Transactions"]);
     expect(loaded.getWorksheet("Wallet")?.getCell("C2").value).toBe("999999999999999.9999");
-    expect(loaded.getWorksheet("Transactions")?.getCell("F2").value).toBe(1000.1234);
+    expect(loaded.getWorksheet("Transactions")?.getCell("C1").value).toBe("Transaction Title");
+    expect(loaded.getWorksheet("Transactions")?.getCell("G2").value).toBe(1000.1234);
   });
 
   it("keeps empty PDF and Excel exports understandable", async () => {

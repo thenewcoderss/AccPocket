@@ -19,11 +19,11 @@ export interface SessionUser {
 
 export interface AccountDto {
   id: string; name: string; type: AccountType; openingBalance: Money; currentBalance: Money;
-  currency: string; archived: boolean;
+  currency: string; archived: boolean; canDelete?: boolean; deleteBlockedReason?: string;
 }
 
 export interface TransactionDto {
-  id: string; type: TransactionType; amount: Money; date: string; description: string;
+  id: string; type: TransactionType; amount: Money; date: string; description: string; title?: string;
   category?: { id: string; name: string; color: string } | null;
   accountName?: string; destinationAccountName?: string;
 }
