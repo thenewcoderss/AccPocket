@@ -25,12 +25,14 @@ export function ErrorBox({ error }: { error: unknown }) {
 
 export function Modal({ title, close, children }: { title: string; close(): void; children: ReactNode }) {
   const dialog = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(close);
+  closeRef.current = close;
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
     const node = dialog.current;
     node?.focus();
     function keydown(event: KeyboardEvent) {
-      if (event.key === "Escape") close();
+      if (event.key === "Escape") closeRef.current();
       if (event.key !== "Tab" || !node) return;
       const focusable = [...node.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href]')];
       if (!focusable.length) return;
@@ -40,7 +42,7 @@ export function Modal({ title, close, children }: { title: string; close(): void
     }
     document.addEventListener("keydown", keydown);
     return () => { document.removeEventListener("keydown", keydown); previous?.focus(); };
-  }, [close]);
+  }, []);
   return <div className="fixed inset-0 z-50 grid items-end bg-slate-950/50 backdrop-blur-[2px] sm:place-items-center sm:p-4" onMouseDown={event => event.target === event.currentTarget && close()}>
     <div ref={dialog} role="dialog" aria-modal="true" aria-labelledby="dialog-title" tabIndex={-1} className="max-h-[92dvh] w-full overflow-y-auto rounded-t-3xl bg-white p-5 shadow-2xl outline-none sm:max-w-lg sm:rounded-3xl sm:p-6">
       <div className="mb-6 flex items-center justify-between gap-4"><h2 id="dialog-title" className="text-xl font-bold tracking-tight">{title}</h2><button className="icon-button bg-slate-100 text-slate-600 hover:bg-slate-200" onClick={close} aria-label="Close dialog"><X size={19}/></button></div>{children}

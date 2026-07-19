@@ -2,7 +2,7 @@ services:
   - type: web
     name: accpocket-api
     runtime: node
-    buildCommand: pnpm install --frozen-lockfile && pnpm db:generate && pnpm --filter @accpocket/api build
+    buildCommand: pnpm install --frozen-lockfile && pnpm db:generate && pnpm db:migrate:deploy && pnpm --filter @accpocket/api build
     startCommand: pnpm --filter @accpocket/api start
     healthCheckPath: /health
     envVars:

@@ -14,7 +14,7 @@ const transactionDate = z.string()
 export const transactionInput = z.object({
   accountId: z.string().min(1),
   categoryId: z.string().min(1).optional(),
-  titleId: z.string().min(1),
+  transactionTitleId: z.string().min(1).optional(),
   type: z.enum(["INCOME", "EXPENSE"]),
   amount: transactionAmount,
   date: transactionDate,

@@ -128,6 +128,7 @@ model Category {
   parent Category? @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
   children Category[] @relation("CategoryHierarchy")
   transactions Transaction[]
+  transactionTitles TransactionTitle[]
   budgets Budget[]
   @@unique([userId, type, name])
 }
@@ -135,19 +136,24 @@ model Category {
 model TransactionTitle {
   id String @id @default(cuid())
   userId String
+  categoryId String
   name String
+  type CategoryType
+  isActive Boolean @default(true)
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   transactions Transaction[]
-  @@unique([userId, name])
-  @@index([userId, createdAt])
+  @@index([userId, categoryId, isActive])
+  @@index([userId, type, isActive])
 }
 
 model Transaction {
   id String @id @default(cuid())
   userId String
   categoryId String?
-  titleId String?
+  transactionTitleId String?
   type TransactionType
   date DateTime
   description String
@@ -158,13 +164,13 @@ model Transaction {
   updatedAt DateTime @updatedAt
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  title TransactionTitle? @relation(fields: [titleId], references: [id], onDelete: Restrict)
+  transactionTitle TransactionTitle? @relation(fields: [transactionTitleId], references: [id], onDelete: SetNull)
   entries LedgerEntry[]
   goalContribution GoalContribution?
   @@index([userId, date])
   @@index([userId, deletedAt, date])
   @@index([userId, type, deletedAt])
-  @@index([titleId])
+  @@index([transactionTitleId])
 }
 
 model LedgerEntry {
