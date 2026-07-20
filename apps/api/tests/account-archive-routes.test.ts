@@ -16,6 +16,9 @@ describe("wallet archive route contract", () => {
     expect(routes).toContain('account.archivedAt ? account : await prisma.account.update');
     expect(routes).toContain('account.archivedAt ? await prisma.account.update');
   });
+  it("always serializes server-calculated account action metadata", () => {
+    expect(routes).toContain("...accountActions(_count.entries, _count.goals, goals.length, isArchivedAccount(account))");
+  });
   it("rejects archived wallets for transactions, transfers, and new goals", () => {
     expect(routes).toContain('Archived wallets cannot be used for new financial activity');
     expect(routes).toContain('Archived wallets cannot be used for transfers');
