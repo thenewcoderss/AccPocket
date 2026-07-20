@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { activeAccounts, canAddEntry, canTransfer, contributionAccounts } from "./accountRequirements";
 
 function account(id: string, archived = false): AccountDto {
-  return { id, name: id, type: "CASH", openingBalance: "0", currentBalance: "0", currency: "BDT", archived };
+  return { id, name: id, type: "CASH", openingBalance: "0", currentBalance: "0", currency: "BDT", archivedAt: archived ? "2026-07-21T00:00:00.000Z" : null, isArchived: archived };
 }
 
 describe("account requirements", () => {
