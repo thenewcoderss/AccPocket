@@ -10,4 +10,9 @@ describe("wallet archive policy", () => {
     expect(isArchivedAccount({ archivedAt: null })).toBe(false);
     expect(isArchivedAccount({ archivedAt: new Date("2026-07-21T00:00:00Z") })).toBe(true);
   });
+  it("always returns a boolean canArchive value for the accounts contract", () => {
+    for (const actions of [accountActions(0, 0, 0, false), accountActions(1, 0, 0, false), accountActions(0, 1, 1, false), accountActions(0, 0, 0, true)]) {
+      expect(typeof actions.canArchive).toBe("boolean");
+    }
+  });
 });
