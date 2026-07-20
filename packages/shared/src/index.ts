@@ -19,7 +19,8 @@ export interface SessionUser {
 
 export interface AccountDto {
   id: string; name: string; type: AccountType; openingBalance: Money; currentBalance: Money;
-  currency: string; archived: boolean; canDelete?: boolean; deleteBlockedReason?: string;
+  currency: string; archivedAt: string | null; isArchived: boolean;
+  canDelete?: boolean; deleteBlockedReason?: string; canArchive?: boolean; archiveBlockedReason?: string;
 }
 
 export interface TransactionDto {

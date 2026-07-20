@@ -12,17 +12,18 @@ import { budgetInput, budgetMonth, budgetMonthDate, budgetProgress } from "../bu
 import { goalInput, goalProgress, goalUpdateInput } from "../goals/validation.js";
 import { performanceTelemetry } from "../../middleware/performance.js";
 import { transactionTitleCreateInput, transactionTitleRemovalAction, transactionTitleUpdateInput } from "../transaction-titles/validation.js";
+import { ACCOUNT_ACTIVE_GOAL_ARCHIVE_REASON, ACCOUNT_GOAL_DELETE_REASON, ACCOUNT_HISTORY_DELETE_REASON, accountActions, isArchivedAccount } from "../accounts/policy.js";
 
 export const financeRouter = Router();
 financeRouter.use(authenticate, requireUnlock);
 const money = z.string().regex(/^\d+(\.\d{1,4})?$/).transform(v => new Prisma.Decimal(v));
 const id = z.string().min(1);
-const serializeAccount = (a: { id: string; name: string; type: string; openingBalance: Prisma.Decimal; currentBalance: Prisma.Decimal; currency: string; archived: boolean }) => ({ ...a, openingBalance: a.openingBalance.toString(), currentBalance: a.currentBalance.toString() });
+const serializeAccount = (a: { id: string; name: string; type: string; openingBalance: Prisma.Decimal; currentBalance: Prisma.Decimal; currency: string; archivedAt: Date | null }) => ({ ...a, archivedAt: a.archivedAt?.toISOString() ?? null, isArchived: isArchivedAccount(a), openingBalance: a.openingBalance.toString(), currentBalance: a.currentBalance.toString() });
 
-async function ownedAccount(userId: string, accountId: string, tx: Prisma.TransactionClient = prisma) {
+async function ownedAccount(userId: string, accountId: string, tx: Prisma.TransactionClient = prisma, allowArchived = false) {
   const account = await tx.account.findFirst({ where: { id: accountId, userId } });
   if (!account) throw new AppError(404, "ACCOUNT_NOT_FOUND", "Wallet was not found");
-  if (account.archived) throw new AppError(409, "ACCOUNT_ARCHIVED", "Archived wallets cannot be changed");
+  if (!allowArchived && isArchivedAccount(account)) throw new AppError(409, "ACCOUNT_ARCHIVED", "Archived wallets cannot be used for new financial activity");
   return account;
 }
 
@@ -33,8 +34,9 @@ async function lockOwnedAccount(userId: string, accountId: string, tx: Prisma.Tr
 }
 
 financeRouter.get("/accounts", asyncRoute(async (req, res) => {
-  const rows = await prisma.account.findMany({ where: { userId: req.userId! }, select: { id: true, name: true, type: true, openingBalance: true, currentBalance: true, currency: true, archived: true, _count: { select: { entries: true, goals: true } } }, orderBy: { createdAt: "asc" } });
-  res.json({ success: true, data: rows.map(({ _count, ...account }) => ({ ...serializeAccount(account), canDelete: _count.entries === 0 && _count.goals === 0, deleteBlockedReason: _count.entries ? "This wallet has transaction history and cannot be deleted." : _count.goals ? "This wallet is used by a savings goal and cannot be deleted." : undefined })) });
+  const query = z.object({ includeArchived: z.coerce.boolean().default(false) }).parse(req.query);
+  const rows = await prisma.account.findMany({ where: { userId: req.userId!, archivedAt: query.includeArchived ? undefined : null }, select: { id: true, name: true, type: true, openingBalance: true, currentBalance: true, currency: true, archivedAt: true, goals: { where: { status: "ACTIVE" }, select: { id: true }, take: 1 }, _count: { select: { entries: true, goals: true } } }, orderBy: { createdAt: "asc" } });
+  res.json({ success: true, data: rows.map(({ _count, goals, ...account }) => ({ ...serializeAccount(account), ...accountActions(_count.entries, _count.goals, goals.length, isArchivedAccount(account)) })) });
 }));
 financeRouter.post("/accounts", asyncRoute(async (req, res) => {
   const input = accountInput.parse(req.body);
@@ -49,12 +51,26 @@ financeRouter.patch("/accounts/:id", asyncRoute(async (req, res) => {
   const account = await prisma.account.update({ where: { id: accountId }, data: input });
   res.json({ success: true, data: serializeAccount(account) });
 }));
+financeRouter.patch("/accounts/:id/archive", asyncRoute(async (req, res) => {
+  const accountId = String(req.params.id);
+  const account = await ownedAccount(req.userId!, accountId, prisma, true);
+  const activeGoals = await prisma.goal.count({ where: { userId: req.userId!, destinationAccountId: accountId, status: "ACTIVE" } });
+  if (activeGoals) throw new AppError(409, "ACCOUNT_ACTIVE_GOAL", ACCOUNT_ACTIVE_GOAL_ARCHIVE_REASON);
+  const archived = account.archivedAt ? account : await prisma.account.update({ where: { id: accountId }, data: { archivedAt: new Date() } });
+  res.json({ success: true, data: serializeAccount(archived) });
+}));
+financeRouter.patch("/accounts/:id/restore", asyncRoute(async (req, res) => {
+  const accountId = String(req.params.id);
+  const account = await ownedAccount(req.userId!, accountId, prisma, true);
+  const restored = account.archivedAt ? await prisma.account.update({ where: { id: accountId }, data: { archivedAt: null } }) : account;
+  res.json({ success: true, data: serializeAccount(restored) });
+}));
 financeRouter.delete("/accounts/:id", asyncRoute(async (req, res) => {
   const accountId = String(req.params.id);
-  await ownedAccount(req.userId!, accountId);
+  await ownedAccount(req.userId!, accountId, prisma, true);
   const [entries, goals] = await Promise.all([prisma.ledgerEntry.count({ where: { accountId } }), prisma.goal.count({ where: { destinationAccountId: accountId } })]);
-  if (entries) throw new AppError(409, "ACCOUNT_IN_USE", "This wallet has transaction history and cannot be deleted");
-  if (goals) throw new AppError(409, "ACCOUNT_IN_USE", "This wallet is used by a savings goal and cannot be deleted");
+  if (entries) throw new AppError(409, "ACCOUNT_IN_USE", ACCOUNT_HISTORY_DELETE_REASON);
+  if (goals) throw new AppError(409, "ACCOUNT_IN_USE", ACCOUNT_GOAL_DELETE_REASON);
   await prisma.account.delete({ where: { id: accountId } });
   res.json({ success: true, data: null });
 }));
@@ -187,7 +203,7 @@ async function createTransfer(userId: string, input: z.infer<typeof transferSche
     const source = accounts.find(account => account.id === input.sourceAccountId);
     const destination = accounts.find(account => account.id === input.destinationAccountId);
     if (!source || !destination) throw new AppError(404, "ACCOUNT_NOT_FOUND", "Wallet was not found");
-    if (source.archived || destination.archived) throw new AppError(409, "ACCOUNT_ARCHIVED", "Archived wallets cannot be changed");
+    if (isArchivedAccount(source) || isArchivedAccount(destination)) throw new AppError(409, "ACCOUNT_ARCHIVED", "Archived wallets cannot be used for transfers");
     if (source.currency !== destination.currency) throw new AppError(422, "CURRENCY_MISMATCH", "Wallets must use the same currency");
     const settings = await tx.userSettings.findUnique({ where: { userId } });
     const sourceNext = source.currentBalance.sub(input.amount);
